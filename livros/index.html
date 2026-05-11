@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minha Biblioteca</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ============ VIEW: LIVROS ============ -->
+    <div id="view-books" class="view">
+      <header class="app-header">
+        <div class="header-left">
+          <span class="app-logo">📚</span>
+          <h1 class="app-title">Minha Biblioteca</h1>
+        </div>
+        <button id="btn-add-book" class="btn btn-primary">+ Adicionar Livro</button>
+      </header>
+
+      <div class="books-controls">
+        <input type="text" id="search-books" placeholder="🔍  Buscar por título ou autor..." class="search-input">
+        <div class="filter-tabs">
+          <button class="filter-tab active" data-filter="all">Todos</button>
+          <button class="filter-tab" data-filter="lendo">Lendo</button>
+          <button class="filter-tab" data-filter="lido">Lidos</button>
+          <button class="filter-tab" data-filter="para-ler">Para Ler</button>
+        </div>
+      </div>
+
+      <div id="books-stats" class="books-stats"></div>
+
+      <div id="books-grid" class="books-grid"></div>
+
+      <div id="books-empty" class="empty-state hidden">
+        <div class="empty-icon">📖</div>
+        <h2>Nenhum livro encontrado</h2>
+        <p>Adicione seu primeiro livro para começar!</p>
+        <button class="btn btn-primary" onclick="openBookModal()">+ Adicionar Livro</button>
+      </div>
+    </div>
+
+    <!-- ============ VIEW: DETALHE DO LIVRO ============ -->
+    <div id="view-book-detail" class="view hidden">
+      <header class="app-header">
+        <button id="btn-back-to-books" class="btn btn-ghost">← Voltar</button>
+        <div class="header-actions">
+          <button id="btn-edit-book" class="btn btn-ghost btn-sm">✏️ Editar</button>
+          <button id="btn-delete-book" class="btn btn-danger-ghost btn-sm">🗑️ Excluir</button>
+        </div>
+      </header>
+
+      <div id="book-detail-header" class="book-detail-header"></div>
+
+      <div class="section-header">
+        <h2>Tópicos</h2>
+        <button id="btn-add-topic" class="btn btn-primary btn-sm">+ Tópico</button>
+      </div>
+
+      <div id="topics-list" class="topics-list"></div>
+
+      <div id="topics-empty" class="empty-state hidden">
+        <div class="empty-icon">📝</div>
+        <h2>Nenhum tópico ainda</h2>
+        <p>Crie tópicos para organizar suas anotações e aprendizados.</p>
+      </div>
+    </div>
+
+    <!-- ============ VIEW: DETALHE DO TÓPICO ============ -->
+    <div id="view-topic-detail" class="view hidden">
+      <header class="app-header">
+        <button id="btn-back-to-book" class="btn btn-ghost">← Voltar</button>
+        <div class="header-actions">
+          <button id="btn-edit-topic-header" class="btn btn-ghost btn-sm">✏️ Editar</button>
+          <button id="btn-delete-topic-header" class="btn btn-danger-ghost btn-sm">🗑️ Excluir</button>
+        </div>
+      </header>
+
+      <div id="topic-detail-header" class="topic-detail-header"></div>
+
+      <div class="section-header">
+        <h2>Anotações</h2>
+        <button id="btn-add-note" class="btn btn-primary btn-sm">+ Anotação</button>
+      </div>
+
+      <div id="notes-list" class="notes-list"></div>
+
+      <div id="notes-empty" class="empty-state hidden">
+        <div class="empty-icon">✏️</div>
+        <h2>Nenhuma anotação ainda</h2>
+        <p>Adicione suas anotações e aprendizados sobre este tópico.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ MODAL: LIVRO ============ -->
+  <div id="modal-book" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-book-title">Adicionar Livro</h2>
+        <button class="modal-close" data-close="modal-book">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Capa do Livro</label>
+          <div id="cover-upload-area" class="cover-upload-area">
+            <img id="cover-preview" class="hidden" alt="Capa">
+            <div id="cover-placeholder">
+              <span>📷</span>
+              <p>Clique para adicionar imagem</p>
+            </div>
+            <div id="cover-remove" class="cover-remove hidden" title="Remover imagem">×</div>
+          </div>
+          <input type="file" id="cover-input" accept="image/*" hidden>
+        </div>
+
+        <div class="form-group">
+          <label for="book-title-input">Título <span class="required">*</span></label>
+          <input type="text" id="book-title-input" placeholder="Digite o título do livro" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label for="book-author-input">Autor</label>
+          <input type="text" id="book-author-input" placeholder="Nome do autor" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label>Status</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="book-status" value="para-ler" checked>
+              <span class="radio-text status-para-ler-text">Para Ler</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="book-status" value="lendo">
+              <span class="radio-text status-lendo-text">Lendo</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="book-status" value="lido">
+              <span class="radio-text status-lido-text">Lido</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Avaliação</label>
+          <div id="star-rating" class="star-rating">
+            <span class="star" data-value="1">★</span>
+            <span class="star" data-value="2">★</span>
+            <span class="star" data-value="3">★</span>
+            <span class="star" data-value="4">★</span>
+            <span class="star" data-value="5">★</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="modal-book">Cancelar</button>
+        <button id="btn-save-book" class="btn btn-primary">Salvar Livro</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: TÓPICO ============ -->
+  <div id="modal-topic" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="modal-topic-title">Adicionar Tópico</h2>
+        <button class="modal-close" data-close="modal-topic">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="topic-title-input">Nome do Tópico <span class="required">*</span></label>
+          <input type="text" id="topic-title-input" placeholder="Ex: Capítulo 1, Conceitos principais..." class="form-input">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="modal-topic">Cancelar</button>
+        <button id="btn-save-topic" class="btn btn-primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: ANOTAÇÃO ============ -->
+  <div id="modal-note" class="modal-overlay hidden">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h2 id="modal-note-title">Nova Anotação</h2>
+        <button class="modal-close" data-close="modal-note">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="note-content-input">Conteúdo <span class="required">*</span></label>
+          <textarea id="note-content-input" placeholder="Escreva sua anotação, insight ou aprendizado aqui...&#10;&#10;Você pode organizar com títulos usando:&#10;### Título&#10;- Lista de itens&#10;- Ponto importante" class="form-textarea"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="modal-hint">Ctrl+Enter para salvar</span>
+        <button class="btn btn-ghost" data-close="modal-note">Cancelar</button>
+        <button id="btn-save-note" class="btn btn-primary">Salvar Anotação</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: CONFIRMAÇÃO ============ -->
+  <div id="modal-confirm" class="modal-overlay hidden">
+    <div class="modal modal-xs">
+      <div class="modal-header">
+        <h2>Confirmar exclusão</h2>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-message" class="confirm-message">Tem certeza que deseja excluir?</p>
+        <p class="confirm-warning">Esta ação não pode ser desfeita.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close="modal-confirm">Cancelar</button>
+        <button id="btn-confirm-ok" class="btn btn-danger">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TOAST ============ -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
