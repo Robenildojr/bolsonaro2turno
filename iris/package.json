@@ -1,0 +1,42 @@
+{
+  "name": "iris-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Íris — agente pessoal de IA com memória criptografada, permissões persistentes e canais web/WhatsApp",
+  "engines": { "node": ">=20.10" },
+  "bin": { "iris": "./dist/cli/index.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "setup": "tsx src/cli/index.ts setup",
+    "iris": "tsx src/cli/index.ts",
+    "test": "node --test --import tsx test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@fastify/cors": "^10.0.1",
+    "@fastify/static": "^8.0.3",
+    "@fastify/websocket": "^11.0.1",
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.0",
+    "zod": "^3.24.1"
+  },
+  "optionalDependencies": {
+    "googleapis": "^144.0.0",
+    "imapflow": "^1.0.171",
+    "mailparser": "^3.7.2",
+    "nodemailer": "^6.9.16",
+    "playwright": "^1.49.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.2",
+    "@types/nodemailer": "^6.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
