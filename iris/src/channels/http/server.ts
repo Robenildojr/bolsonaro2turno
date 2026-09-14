@@ -49,8 +49,33 @@ export class HttpChannel {
     return this.app;
   }
 
-  async start(): Promise<string> {
+  /**
+   * Registra plugins e rotas, sem abrir a porta.
+   *
+   * Separado de `listen` porque o Fastify não aceita rotas novas depois que o
+   * servidor está no ar — e o webhook do WhatsApp precisa entrar aqui, entre
+   * o preparo e a escuta.
+   */
+  async prepare(): Promise<FastifyInstance> {
     await this.app.register(fastifyWebsocket);
+
+    /*
+     * Guarda o corpo cru de cada JSON. A assinatura do webhook da Meta é
+     * calculada sobre os bytes exatos que ela enviou; um JSON reserializado
+     * não bate, e a verificação falharia sempre.
+     */
+    this.app.addContentTypeParser(
+      'application/json',
+      { parseAs: 'string' },
+      (req, body, done) => {
+        (req as FastifyRequest & { rawBody?: string }).rawBody = body as string;
+        try {
+          done(null, body === '' ? {} : JSON.parse(body as string));
+        } catch (err) {
+          done(err as Error, undefined);
+        }
+      },
+    );
 
     // A raiz do projeto sobe um nível a partir de dist/ ou de src/.
     const webRoot = path.resolve(here, '../../../web');
@@ -58,11 +83,21 @@ export class HttpChannel {
 
     this.registerRoutes(webRoot);
     this.bridgeBusToClients();
+    return this.app;
+  }
 
+  /** Abre a porta. Depois disto, nenhuma rota nova é aceita. */
+  async listen(): Promise<string> {
     const address = await this.app.listen({ host: this.cfg.server.host, port: this.cfg.server.port });
     const url = `${address}/?token=${this.cfg.server.accessToken ?? ''}`;
     log.info('interface no ar', { endereco: address });
     return url;
+  }
+
+  /** Preparo + escuta, para quem não precisa pendurar nada no meio. */
+  async start(): Promise<string> {
+    await this.prepare();
+    return this.listen();
   }
 
   async stop(): Promise<void> {

@@ -22,7 +22,7 @@ import { initBroker } from './core/permissions/broker.js';
 import { initMemory } from './core/memory/index.js';
 import { initAgent } from './core/agent/agent.js';
 import { registerCoreTools } from './tools/index.js';
-import { initHttpChannel } from './channels/http/server.js';
+import { initHttpChannel, type HttpChannel } from './channels/http/server.js';
 import { askSecret } from './util/prompt.js';
 import { closeBrowser } from './integrations/browser/browser.js';
 
@@ -81,13 +81,12 @@ export async function boot(opts: BootOptions = {}): Promise<BootedSystem> {
     log.info('token de acesso gerado para esta instalação');
   }
 
-  // 4. canais
+  // 4. canais — o preparo vem antes da escuta para que os módulos opcionais
+  //    consigam pendurar rotas (o webhook do WhatsApp mora aí).
   const http = initHttpChannel(cfg);
-  const url = await http.start();
-
-  // 5. módulos opcionais (agendador, WhatsApp, observador) se registram aqui
-  //    conforme são habilitados na configuração.
-  await startOptional(cfg);
+  await http.prepare();
+  await startOptional(cfg, http);
+  const url = await http.listen();
 
   console.log(`\n  ${cfg.assistantName} está no ar.\n  Abra: ${url}\n`);
 
@@ -113,8 +112,8 @@ export async function boot(opts: BootOptions = {}): Promise<BootedSystem> {
  * agendador, a Íris continua respondendo na tela. Cada módulo é carregado sob
  * demanda para que uma dependência opcional ausente não custe nada no arranque.
  */
-async function startOptional(cfg: Config): Promise<void> {
-  for (const [nome, fn] of optionalModules(cfg)) {
+async function startOptional(cfg: Config, http: HttpChannel): Promise<void> {
+  for (const [nome, fn] of optionalModules(cfg, http)) {
     try {
       await fn();
     } catch (err) {
@@ -126,8 +125,21 @@ async function startOptional(cfg: Config): Promise<void> {
 type OptionalModule = [string, () => Promise<void>];
 
 /** Registrado por etapa: cada módulo entra aqui quando fica pronto. */
-function optionalModules(_cfg: Config): OptionalModule[] {
-  return [];
+function optionalModules(cfg: Config, http: HttpChannel): OptionalModule[] {
+  const modulos: OptionalModule[] = [];
+
+  if (cfg.whatsapp.enabled) {
+    modulos.push([
+      'whatsapp',
+      async () => {
+        const { startWhatsApp } = await import('./channels/whatsapp/index.js');
+        const canal = await startWhatsApp(cfg, http.fastify);
+        onShutdown(() => canal.stop());
+      },
+    ]);
+  }
+
+  return modulos;
 }
 
 /** Desligamentos de módulos opcionais, na ordem inversa da subida. */

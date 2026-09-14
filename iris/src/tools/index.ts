@@ -14,6 +14,7 @@ import { shellTools } from './shell.tools.js';
 import { systemTools } from './system.tools.js';
 import { vaultTools } from './vault.tools.js';
 import { webTools } from './web.tools.js';
+import { whatsappTools } from './whatsapp.tools.js';
 
 const log = createLogger('ferramentas');
 
@@ -32,6 +33,7 @@ export function registerCoreTools(opts: ToolSetOptions = {}): void {
     ...memoryTools,
     ...vaultTools,
     ...systemTools,
+    ...whatsappTools,
     ...(opts.extra ?? []),
   ];
 
@@ -50,4 +52,5 @@ export {
   systemTools,
   vaultTools,
   webTools,
+  whatsappTools,
 };
