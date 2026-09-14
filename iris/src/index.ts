@@ -128,6 +128,15 @@ type OptionalModule = [string, () => Promise<void>];
 function optionalModules(cfg: Config, http: HttpChannel): OptionalModule[] {
   const modulos: OptionalModule[] = [];
 
+  modulos.push([
+    'agendador',
+    async () => {
+      const { startScheduler, stopScheduler } = await import('./core/scheduler/scheduler.js');
+      await startScheduler(cfg);
+      onShutdown(() => stopScheduler());
+    },
+  ]);
+
   if (cfg.whatsapp.enabled) {
     modulos.push([
       'whatsapp',
