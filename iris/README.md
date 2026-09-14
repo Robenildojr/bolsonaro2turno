@@ -57,11 +57,21 @@ criptografado no seu banco local — nada é perdido.
   continuam confirmando mesmo autorizadas — você pode desligar isso em
   `docs/PERMISSOES.md`, mas leia antes o porquê.
 
+### Documentos e imagens
+Arraste uma foto ou um PDF para a tela, cole da área de transferência, ou mande
+pelo WhatsApp: ela **enxerga**. Petição digitalizada, print de sistema, foto de
+intimação. Documento que já está no seu computador ela abre sozinha —
+*"lê a petição em ~/processos/almeida.pdf"*.
+
+O anexo fica cifrado no disco e o histórico guarda só uma referência leve: você
+pergunta cinco coisas sobre a foto e a conversa continua barata.
+
 ### Ferramentas
-São **37**, todas passando pelo broker de permissões: arquivos, terminal,
+São **39**, todas passando pelo broker de permissões: arquivos, terminal,
 navegador real (Playwright, com login que persiste), busca e leitura na web,
 cofre de credenciais, memória, agenda e lembretes, e-mail (IMAP/SMTP), consulta
-processual no CNJ, WhatsApp, backup cifrado e o observador de contexto.
+processual no CNJ, leitura de documentos e imagens, WhatsApp, backup cifrado e o
+observador de contexto.
 
 ### Vida prática
 - Lembretes de audiência, compromisso e prazo, com aviso na tela e no WhatsApp.
@@ -129,14 +139,14 @@ npm run iris -- panico                  # revoga tudo e tranca as chaves
 
 ## O estado do projeto
 
-212 testes automatizados cobrindo criptografia, memória, permissões, executor de
-ferramentas, agenda, WhatsApp, backup e observador — inclusive os casos que
+233 testes automatizados cobrindo criptografia, memória, permissões, executor de
+ferramentas, agenda, WhatsApp, anexos, backup e observador — inclusive os casos que
 importam de verdade: que a senha nunca chega ao modelo, que a autorização não
 vaza de escopo, que o backup é ilegível sem a senha-mestra e que o observador
 nasce desligado.
 
 ```bash
-npm test        # 212 testes
+npm test        # 233 testes
 npm run build   # compila
 ```
 

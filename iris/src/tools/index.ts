@@ -11,6 +11,7 @@ import { agendaTools, emailTools, justiceTools } from './agenda.tools.js';
 import { backupTools } from './backup.tools.js';
 import { observerTools } from './observer.tools.js';
 import { browserTools } from './browser.tools.js';
+import { documentoTools } from './documento.tools.js';
 import { fsTools } from './fs.tools.js';
 import { memoryTools } from './memory.tools.js';
 import { shellTools } from './shell.tools.js';
@@ -30,6 +31,7 @@ export function registerCoreTools(opts: ToolSetOptions = {}): void {
   const registry = getRegistry();
   const all = [
     ...fsTools,
+    ...documentoTools,
     ...shellTools,
     ...browserTools,
     ...webTools,
@@ -56,6 +58,7 @@ export {
   agendaTools,
   backupTools,
   browserTools,
+  documentoTools,
   emailTools,
   justiceTools,
   fsTools,

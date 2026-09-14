@@ -27,6 +27,7 @@ import type { Decision } from '../../core/permissions/capabilities.js';
 import { CloudApiProvider } from './cloud.js';
 import { BaileysProvider } from './baileys.js';
 import { dividirMensagem, mesmoNumero, type MensagemRecebida, type WhatsAppProvider } from './provider.js';
+import { guardar, type Anexo } from '../../core/agent/attachments.js';
 
 const log = createLogger('whatsapp');
 
@@ -104,7 +105,20 @@ export class WhatsAppChannel {
     }
 
     const texto = msg.texto.trim();
-    if (!texto) return;
+
+    // Foto de documento e PDF são a forma mais natural de mandar material pelo
+    // WhatsApp — a mídia é baixada aqui e vai para o modelo como anexo de
+    // verdade, não como aviso de que "chegou uma imagem".
+    const anexos = await this.baixarAnexos(msg);
+
+    if (!texto && anexos.length === 0) {
+      if (msg.tipo === 'audio') {
+        await this.enviarAoDono(
+          'Recebi o áudio, mas ainda não transcrevo áudio do WhatsApp. Manda por escrito ou pela tela.',
+        );
+      }
+      return;
+    }
 
     // Se há autorização pendente, a mensagem é lida como a resposta dela.
     if (this.pendente && Date.now() < this.pendente.expiraEm) {
@@ -135,7 +149,8 @@ export class WhatsAppChannel {
       const resultado = await getAgent().run({
         conversationId,
         channel: 'whatsapp',
-        text: texto,
+        text: texto || `Veja o que eu mandei: ${anexos.map((a) => a.nome).join(', ')}.`,
+        ...(anexos.length ? { attachments: anexos } : {}),
       });
 
       const resposta = resultado.text?.trim();
@@ -151,6 +166,25 @@ export class WhatsAppChannel {
       await this.enviarAoDono(`Deu erro aqui: ${describeError(err)}`).catch(() => {});
     } finally {
       this.ocupada = false;
+    }
+  }
+
+  /** Baixa a mídia da mensagem, se houver e se o provedor souber. */
+  private async baixarAnexos(msg: MensagemRecebida): Promise<Anexo[]> {
+    if (!msg.midia || !this.provider.baixarMidia) return [];
+
+    try {
+      const bytes = await this.provider.baixarMidia(msg.midia);
+      if (!bytes) return [];
+      const anexo = await guardar(bytes, { nome: msg.midia.nome, mime: msg.midia.mime });
+      log.info('mídia recebida pelo WhatsApp', { tipo: anexo.tipo, kb: Math.round(anexo.bytes / 1024) });
+      return [anexo];
+    } catch (err) {
+      log.warn('não consegui aproveitar a mídia', { erro: describeError(err) });
+      await this.enviarAoDono(`Recebi o arquivo mas não consegui abrir: ${describeError(err)}`).catch(
+        () => {},
+      );
+      return [];
     }
   }
 

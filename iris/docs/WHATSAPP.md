@@ -163,8 +163,10 @@ receberia a mesma coisa em dois lugares.
 
 ## Limites conhecidos
 
+- **Foto e PDF funcionam.** Mande a foto da intimação ou o PDF da sentença e ela
+  lê o conteúdo — é o caminho mais rápido para pôr um documento diante dela.
+  Pelo provedor Baileys a mídia ainda não é baixada; pela Cloud API, sim.
 - **Áudio não é transcrito ainda.** Ela avisa que recebeu e pede o texto.
-- **Imagens não são lidas.** A legenda chega; a imagem, não.
 - **Mensagem para terceiros não é enviada.** A Cloud API exige que a pessoa
   tenha escrito primeiro nas últimas 24h, ou um modelo aprovado pela Meta — os
   dois casos pedem decisão sua. Ela diz o que mandaria e você envia.

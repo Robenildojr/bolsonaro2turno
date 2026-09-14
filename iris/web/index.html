@@ -26,6 +26,20 @@
 
     <!-- Barra inferior: só aparece no hover ou ao digitar. -->
     <footer class="barra">
+      <button id="btn-anexo" class="botao" title="Anexar imagem ou PDF" aria-label="Anexar">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path
+            d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a2 2 0 0 1-3-3l7-7"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+      <input id="arquivo" type="file" multiple accept="image/*,application/pdf,.txt,.md,.csv,.json" hidden />
+
       <button id="btn-microfone" class="botao" title="Falar (barra de espaço)" aria-label="Falar">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
           <path
@@ -68,6 +82,9 @@
         </svg>
       </button>
     </footer>
+
+    <!-- Anexos esperando envio. -->
+    <div id="anexos" class="anexos" hidden></div>
 
     <!-- Painel da conversa, escondido por padrão. -->
     <aside id="transcricao" class="transcricao" hidden>
@@ -112,6 +129,11 @@
     </div>
 
     <div id="conexao" class="conexao" hidden>reconectando…</div>
+
+    <!-- Alvo de arrastar e soltar, cobre a tela toda enquanto o arquivo paira. -->
+    <div id="soltar" class="soltar" hidden>
+      <div>solte aqui a imagem ou o PDF</div>
+    </div>
 
     <script type="module" src="/src/app.js"></script>
   </body>

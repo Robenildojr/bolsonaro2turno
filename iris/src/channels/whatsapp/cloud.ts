@@ -15,7 +15,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config.js';
 import { createLogger, describeError } from '../../util/logger.js';
-import type { MensagemRecebida, WhatsAppProvider } from './provider.js';
+import type { MensagemRecebida, MidiaRecebida, WhatsAppProvider } from './provider.js';
 
 const log = createLogger('whatsapp:cloud');
 
@@ -27,7 +27,7 @@ interface CloudMessage {
   text?: { body: string };
   audio?: { id: string };
   image?: { id: string; caption?: string };
-  document?: { id: string; filename?: string; caption?: string };
+  document?: { id: string; filename?: string; caption?: string; mime_type?: string };
 }
 
 interface WebhookPayload {
@@ -109,6 +109,41 @@ export class CloudApiProvider implements WhatsAppProvider {
     }
   }
 
+  /**
+   * Baixa uma mídia em duas etapas, como a Graph API exige: primeiro o
+   * endereço temporário, depois os bytes — os dois com o mesmo token.
+   */
+  async baixarMidia(midia: MidiaRecebida): Promise<Buffer | null> {
+    const { graphVersion, accessToken } = this.cfg.whatsapp;
+
+    const meta = await fetch(`https://graph.facebook.com/${graphVersion}/${midia.id}`, {
+      headers: { authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!meta.ok) {
+      log.warn('não consegui obter o endereço da mídia', { status: meta.status });
+      return null;
+    }
+
+    const { url, file_size: tamanho } = (await meta.json()) as { url?: string; file_size?: number };
+    if (!url) return null;
+    if (tamanho && tamanho > 30 * 1024 * 1024) {
+      log.warn('mídia grande demais', { bytes: tamanho });
+      return null;
+    }
+
+    // O endereço devolvido também exige o token — não é um link público.
+    const bytes = await fetch(url, {
+      headers: { authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!bytes.ok) {
+      log.warn('não consegui baixar a mídia', { status: bytes.status });
+      return null;
+    }
+    return Buffer.from(await bytes.arrayBuffer());
+  }
+
   // ── rotas ──────────────────────────────────────────────────────────────────
 
   private registrarRotas(): void {
@@ -187,10 +222,11 @@ function converter(msg: CloudMessage): MensagemRecebida | null {
     case 'image':
       return {
         ...base,
-        texto: msg.image?.caption
-          ? `[imagem enviada] ${msg.image.caption}`
-          : '[imagem enviada sem legenda — não consigo ver imagens pelo WhatsApp ainda]',
+        texto: msg.image?.caption ?? '',
         tipo: 'imagem',
+        ...(msg.image?.id
+          ? { midia: { id: msg.image.id, mime: 'image/jpeg', nome: `foto-${base.id.slice(-8)}.jpg` } }
+          : {}),
       };
     case 'audio':
       return {
@@ -201,8 +237,17 @@ function converter(msg: CloudMessage): MensagemRecebida | null {
     case 'document':
       return {
         ...base,
-        texto: `[documento enviado: ${msg.document?.filename ?? 'sem nome'}] ${msg.document?.caption ?? ''}`.trim(),
+        texto: msg.document?.caption ?? '',
         tipo: 'documento',
+        ...(msg.document?.id
+          ? {
+              midia: {
+                id: msg.document.id,
+                mime: msg.document.mime_type ?? 'application/pdf',
+                nome: msg.document.filename ?? `documento-${base.id.slice(-8)}.pdf`,
+              },
+            }
+          : {}),
       };
     default:
       return null;

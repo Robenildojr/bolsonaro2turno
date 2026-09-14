@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { getBroker } from '../permissions/broker.js';
 import { getAudit } from '../permissions/audit.js';
 import { getVault, scrubSecrets, Vault } from '../vault/vault.js';
+import type { Anexo } from './attachments.js';
 import { bus } from '../events/bus.js';
 import { createLogger, describeError } from '../../util/logger.js';
 import { clip } from '../../util/redact.js';
@@ -40,6 +41,14 @@ export interface ToolResult {
   content: string;
   /** Dados estruturados para a UI (não vão para o modelo). */
   data?: unknown;
+  /**
+   * Imagens e PDFs que a ferramenta quer colocar diante dos olhos do modelo.
+   *
+   * Existe porque "ler um documento digitalizado" não cabe em texto: o
+   * resultado útil de abrir uma petição escaneada é a página em si, não uma
+   * descrição dela.
+   */
+  attachments?: Anexo[];
 }
 
 export interface ToolDefinition<I = Record<string, unknown>> {

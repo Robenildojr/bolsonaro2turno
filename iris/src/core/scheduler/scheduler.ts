@@ -54,9 +54,11 @@ export async function startScheduler(cfg: Config = loadConfig()): Promise<Schedu
   });
 
   // ── madrugada: manutenção do banco ─────────────────────────────────────────
-  scheduler.agendar('manutencao', '30 4 * * 0', () => {
+  scheduler.agendar('manutencao', '30 4 * * 0', async () => {
     getStore().maintenance();
     getAudit().prune(365);
+    const { limparAntigos } = await import('../agent/attachments.js');
+    await limparAntigos(90);
     log.info('manutenção semanal do banco concluída');
   });
 

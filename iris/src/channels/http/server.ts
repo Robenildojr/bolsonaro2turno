@@ -21,6 +21,7 @@ import { getBroker } from '../../core/permissions/broker.js';
 import { getAudit } from '../../core/permissions/audit.js';
 import { getStore } from '../../core/db/database.js';
 import { constantTimeEqual } from '../../core/crypto/cipher.js';
+import { guardar, metadados, tiposAceitos, type Anexo } from '../../core/agent/attachments.js';
 import { createLogger, describeError } from '../../util/logger.js';
 import type { Decision } from '../../core/permissions/capabilities.js';
 
@@ -29,7 +30,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** Mensagens que o navegador manda. */
 type ClientMessage =
-  | { type: 'mensagem'; texto: string; conversaId?: string }
+  | { type: 'mensagem'; texto: string; conversaId?: string; anexos?: string[] }
   | { type: 'interromper' }
   | { type: 'permissao'; id: string; decisao: Decision }
   | { type: 'historico'; conversaId?: string }
@@ -198,6 +199,31 @@ export class HttpChannel {
       return { resposta: result.text, conversaId: result.conversationId };
     });
 
+    /**
+     * Recebe um anexo (foto de documento, PDF, texto) em base64.
+     *
+     * Chega por JSON e não por multipart de propósito: o corpo já passa pelo
+     * mesmo parser que guarda o corpo cru do webhook, e o limite de 16 MB do
+     * servidor cobre com folga os limites de anexo da própria API.
+     */
+    this.app.post('/api/anexo', async (req, reply) => {
+      if (!auth(req, reply)) return;
+      const body = req.body as { nome?: string; mime?: string; base64?: string };
+      if (!body?.base64 || !body.nome) {
+        return reply.code(400).send({ erro: `informe nome e base64. Aceito: ${tiposAceitos()}` });
+      }
+
+      try {
+        const anexo = await guardar(Buffer.from(body.base64, 'base64'), {
+          nome: body.nome,
+          mime: body.mime ?? '',
+        });
+        return anexo;
+      } catch (err) {
+        return reply.code(400).send({ erro: describeError(err) });
+      }
+    });
+
     this.app.get('/saude', async () => ({ ok: true, em: Date.now() }));
 
     this.app.get('/ws', { websocket: true }, (socket, req) => {
@@ -277,10 +303,25 @@ export class HttpChannel {
 
         case 'mensagem': {
           const texto = (msg.texto ?? '').trim();
-          if (!texto) return;
+          const anexos = (msg.anexos ?? [])
+            .map((id) => metadados(id))
+            .filter((a): a is Anexo => a !== null);
+          // Anexo sozinho é mensagem válida: a foto já diz o que ele quer.
+          if (!texto && anexos.length === 0) return;
+
           const conversationId = msg.conversaId ?? this.currentConversation();
-          this.broadcast({ type: 'mensagem', papel: 'user', conteudo: texto, em: Date.now() });
-          const result = await getAgent().run({ conversationId, channel: 'web', text: texto });
+          this.broadcast({
+            type: 'mensagem',
+            papel: 'user',
+            conteudo: texto || anexos.map((a) => `[${a.tipo}: ${a.nome}]`).join(' '),
+            em: Date.now(),
+          });
+          const result = await getAgent().run({
+            conversationId,
+            channel: 'web',
+            text: texto || `Veja o que eu anexei: ${anexos.map((a) => a.nome).join(', ')}.`,
+            ...(anexos.length ? { attachments: anexos } : {}),
+          });
           this.broadcast({
             type: 'fim',
             conversaId: result.conversationId,

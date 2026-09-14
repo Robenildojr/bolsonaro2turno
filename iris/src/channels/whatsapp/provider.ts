@@ -19,6 +19,13 @@
  * interface.
  */
 
+export interface MidiaRecebida {
+  /** Id da mídia no provedor, para baixar depois. */
+  id: string;
+  mime: string;
+  nome: string;
+}
+
 export interface MensagemRecebida {
   /** Número do remetente em E.164 sem '+'. */
   de: string;
@@ -26,12 +33,15 @@ export interface MensagemRecebida {
   /** Id da mensagem no provedor, para deduplicação. */
   id: string;
   em: number;
-  /** Tipo original — imagem e áudio chegam aqui como descrição. */
   tipo: 'texto' | 'audio' | 'imagem' | 'documento' | 'outro';
+  /** Foto ou PDF que veio junto — baixado sob demanda pelo provedor. */
+  midia?: MidiaRecebida;
 }
 
 export interface WhatsAppProvider {
   readonly nome: string;
+  /** Baixa uma mídia recebida. Nem todo provedor consegue. */
+  baixarMidia?(midia: MidiaRecebida): Promise<Buffer | null>;
   /** Sobe o provedor. Pode pedir QR (Baileys) ou apenas validar credenciais. */
   iniciar(): Promise<void>;
   parar(): Promise<void>;

@@ -25,6 +25,11 @@ import { formatDateTime } from '../../util/time.js';
 import type { MemoryEngine } from '../memory/index.js';
 import { buildContextBlock, buildSystemPrompt, WHATSAPP_HINT } from './prompt.js';
 import { getRegistry, truncateForModel, type ToolContext } from './tools.js';
+import {
+  hidratarHistorico,
+  referencia,
+  type Anexo,
+} from './attachments.js';
 
 const log = createLogger('agente');
 
@@ -45,6 +50,8 @@ export interface TurnInput {
   conversationId: string;
   channel: string;
   text: string;
+  /** Imagens, PDFs e textos anexados a esta mensagem. */
+  attachments?: Anexo[];
   /** Texto extra de contexto do canal (ex.: agenda do dia). */
   extraContext?: string;
   signal?: AbortSignal;
@@ -115,11 +122,23 @@ export class Agent {
 
       // Persiste a mensagem do dono antes de qualquer coisa: se der erro no
       // meio do caminho, o que ele disse não se perde.
+      //
+      // Anexos entram como referência leve, não como base64: o conteúdo real é
+      // reidratado do disco só na hora de montar a requisição.
+      const anexos = input.attachments ?? [];
       this.memory.conversations.append({
         conversationId,
         role: 'user',
         content: input.text,
         channel,
+        ...(anexos.length
+          ? {
+              blocks: [
+                ...anexos.map((a) => referencia(a)),
+                ...(input.text.trim() ? [{ type: 'text', text: input.text }] : []),
+              ],
+            }
+          : {}),
       });
 
       const contextBlock = await this.buildContext(input);
@@ -138,10 +157,9 @@ export class Agent {
         // O bloco de contexto entra como instrução de operador logo depois da
         // mensagem do dono — não invalida o prefixo cacheado e não fica no
         // histórico gravado.
-        const request = this.buildRequest(
-          contextInjected ? messages : withContext(messages, contextBlock),
-          registry,
-        );
+        const comContexto = contextInjected ? messages : withContext(messages, contextBlock);
+        // Reidrata os anexos recentes; os antigos viram descrição de texto.
+        const request = this.buildRequest(await hidratarHistorico(comContexto), registry);
         contextInjected = true;
 
         const message = await this.streamOnce(request, conversationId, controller.signal);
@@ -191,7 +209,7 @@ export class Agent {
 
         // Chamadas independentes rodam em paralelo; os resultados voltam
         // juntos, numa única mensagem do usuário, como a API exige.
-        const results = await Promise.all(
+        const executados = await Promise.all(
           toolUses.map(async (use) => {
             toolCalls++;
             const result = await registry.execute(use.name, use.input, ctx);
@@ -201,18 +219,29 @@ export class Agent {
               content: truncateForModel(result.content),
               ...(result.ok ? {} : { is_error: true }),
             };
-            return block;
+            return { block, attachments: result.attachments ?? [] };
           }),
         );
+
+        // Documento trazido por ferramenta vira referência na mesma mensagem:
+        // os blocos de tool_result vêm primeiro, como a API espera, e o
+        // conteúdo visual logo em seguida.
+        const blocosResultado: unknown[] = [
+          ...executados.map((e) => e.block),
+          ...executados.flatMap((e) => e.attachments.map((a) => referencia(a))),
+        ];
 
         this.memory.conversations.append({
           conversationId,
           role: 'user',
           content: '',
-          blocks: results,
+          blocks: blocosResultado,
           channel,
         });
-        messages.push({ role: 'user', content: results });
+        messages.push({
+          role: 'user',
+          content: blocosResultado as Anthropic.Beta.BetaContentBlockParam[],
+        });
 
         if (iteration === MAX_ITERATIONS - 1) {
           log.warn('limite de iterações atingido no turno', { conversationId, toolCalls });

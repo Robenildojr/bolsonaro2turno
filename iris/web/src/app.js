@@ -34,6 +34,10 @@ const el = {
   avisos: $('avisos'),
   observador: $('observador'),
   conexao: $('conexao'),
+  anexoBtn: $('btn-anexo'),
+  arquivo: $('arquivo'),
+  anexos: $('anexos'),
+  soltar: $('soltar'),
 };
 
 const orbe = new Orbe(el.canvas);
@@ -47,6 +51,8 @@ const estado = {
   filaPermissoes: [],
   permissaoAtual: null,
   ultimaEntradaPorVoz: false,
+  /** Anexos já enviados ao servidor, esperando a próxima mensagem. */
+  anexos: [],
 };
 
 if (estado.token) {
@@ -225,11 +231,168 @@ function aoMudarEstado(novo, detalhe) {
   if (novo === 'error' && detalhe) mostrarAviso('Erro', detalhe, 'high');
 }
 
+// ── anexos ───────────────────────────────────────────────────────────────────
+
+const MAX_ANEXO = 30 * 1024 * 1024;
+
+async function anexar(arquivos) {
+  for (const arquivo of arquivos) {
+    if (arquivo.size > MAX_ANEXO) {
+      mostrarAviso('Arquivo grande demais', `${arquivo.name} passa de 30 MB.`, 'normal');
+      continue;
+    }
+
+    // Cartão otimista: o arquivo aparece na tela enquanto sobe.
+    const cartao = cartaoAnexo(arquivo);
+    estado.anexos.push(cartao);
+    desenharAnexos();
+
+    try {
+      const base64 = await lerBase64(arquivo);
+      const resposta = await fetch('/api/anexo', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${estado.token}` },
+        body: JSON.stringify({ nome: arquivo.name, mime: arquivo.type, base64 }),
+      });
+
+      const corpo = await resposta.json();
+      if (!resposta.ok) throw new Error(corpo.erro ?? `HTTP ${resposta.status}`);
+
+      cartao.id = corpo.id;
+      cartao.tipo = corpo.tipo;
+      cartao.estado = 'pronto';
+    } catch (err) {
+      cartao.estado = 'erro';
+      cartao.erro = String(err.message ?? err);
+      mostrarAviso('Não consegui anexar', `${arquivo.name}: ${cartao.erro}`, 'normal');
+    }
+    desenharAnexos();
+  }
+  el.barra.classList.add('ativa');
+}
+
+function cartaoAnexo(arquivo) {
+  return {
+    chave: `${arquivo.name}-${arquivo.size}-${Date.now()}-${Math.random()}`,
+    nome: arquivo.name,
+    tipo: arquivo.type.startsWith('image/') ? 'imagem' : arquivo.type === 'application/pdf' ? 'pdf' : 'texto',
+    // A miniatura é local: não espera o servidor para aparecer.
+    previa: arquivo.type.startsWith('image/') ? URL.createObjectURL(arquivo) : null,
+    id: null,
+    estado: 'enviando',
+  };
+}
+
+function lerBase64(arquivo) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onload = () => resolve(String(leitor.result).split(',')[1] ?? '');
+    leitor.onerror = () => reject(new Error('não consegui ler o arquivo'));
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+function desenharAnexos() {
+  el.anexos.textContent = '';
+  el.anexos.hidden = estado.anexos.length === 0;
+
+  for (const anexo of estado.anexos) {
+    const div = document.createElement('div');
+    div.className = 'anexo';
+    div.dataset.estado = anexo.estado;
+
+    if (anexo.previa) {
+      const img = document.createElement('img');
+      img.src = anexo.previa;
+      img.alt = '';
+      div.appendChild(img);
+    } else {
+      const icone = document.createElement('span');
+      icone.className = 'icone';
+      // Imagem sem miniatura acontece quando o anexo não veio do seletor local
+      // (mídia do WhatsApp, por exemplo) — o rótulo tem de dizer a verdade.
+      icone.textContent = anexo.tipo === 'pdf' ? 'PDF' : anexo.tipo === 'imagem' ? 'IMG' : 'TXT';
+      div.appendChild(icone);
+    }
+
+    const nome = document.createElement('span');
+    nome.className = 'nome';
+    nome.textContent = anexo.nome;
+    div.appendChild(nome);
+
+    const tirar = document.createElement('button');
+    tirar.className = 'tirar';
+    tirar.textContent = '×';
+    tirar.title = 'Remover';
+    tirar.addEventListener('click', () => {
+      if (anexo.previa) URL.revokeObjectURL(anexo.previa);
+      estado.anexos = estado.anexos.filter((a) => a.chave !== anexo.chave);
+      desenharAnexos();
+    });
+    div.appendChild(tirar);
+
+    el.anexos.appendChild(div);
+  }
+}
+
+function limparAnexos() {
+  for (const anexo of estado.anexos) {
+    if (anexo.previa) URL.revokeObjectURL(anexo.previa);
+  }
+  estado.anexos = [];
+  desenharAnexos();
+}
+
+el.anexoBtn.addEventListener('click', () => el.arquivo.click());
+el.arquivo.addEventListener('change', () => {
+  void anexar([...el.arquivo.files]);
+  el.arquivo.value = '';
+});
+
+// Colar imagem direto da área de transferência — o gesto mais rápido de todos.
+document.addEventListener('paste', (evento) => {
+  const arquivos = [...(evento.clipboardData?.files ?? [])];
+  if (arquivos.length === 0) return;
+  evento.preventDefault();
+  void anexar(arquivos);
+});
+
+// Arrastar e soltar em qualquer lugar da tela.
+let arrastando = 0;
+document.addEventListener('dragenter', (evento) => {
+  if (![...(evento.dataTransfer?.types ?? [])].includes('Files')) return;
+  arrastando++;
+  el.soltar.hidden = false;
+});
+document.addEventListener('dragover', (evento) => evento.preventDefault());
+document.addEventListener('dragleave', () => {
+  if (--arrastando <= 0) {
+    arrastando = 0;
+    el.soltar.hidden = true;
+  }
+});
+document.addEventListener('drop', (evento) => {
+  evento.preventDefault();
+  arrastando = 0;
+  el.soltar.hidden = true;
+  const arquivos = [...(evento.dataTransfer?.files ?? [])];
+  if (arquivos.length) void anexar(arquivos);
+});
+
 // ── envio ────────────────────────────────────────────────────────────────────
 
 function enviar(texto) {
   const limpo = (texto ?? el.entrada.value).trim();
-  if (!limpo) return;
+  const prontos = estado.anexos.filter((a) => a.estado === 'pronto');
+  const subindo = estado.anexos.some((a) => a.estado === 'enviando');
+
+  if (subindo) {
+    mostrarAtividade('esperando o anexo subir…', 2000);
+    return;
+  }
+  // Anexo sozinho é mensagem válida: a foto já diz o que ele quer.
+  if (!limpo && prontos.length === 0) return;
+
   voz.calar();
   el.entrada.value = '';
   estado.bufferResposta = '';
@@ -237,7 +400,14 @@ function enviar(texto) {
   orbe.definirEstado('thinking');
   orbe.emitirOnda(1);
   el.parar.classList.remove('oculto');
-  enviarSocket({ type: 'mensagem', texto: limpo, conversaId: estado.conversaId });
+
+  enviarSocket({
+    type: 'mensagem',
+    texto: limpo,
+    conversaId: estado.conversaId,
+    anexos: prontos.map((a) => a.id),
+  });
+  limparAnexos();
 }
 
 el.form.addEventListener('submit', (evento) => {
@@ -435,7 +605,7 @@ document.addEventListener('click', (evento) => {
  * navegador põe o orbe no estado desejado, e é assim que as capturas de tela
  * da documentação são feitas.
  */
-window.iris = { orbe, voz, estado, simular: tratar };
+window.iris = { orbe, voz, estado, simular: tratar, desenharAnexos, anexar };
 
 // ── início ───────────────────────────────────────────────────────────────────
 
