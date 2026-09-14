@@ -9,3 +9,5 @@ keyring.json
 *.iris
 .playwright/
 coverage/
+*.tmp.ts
+*.tmp.mjs

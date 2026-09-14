@@ -19,6 +19,9 @@ e deixa o sistema funcionando — nada fica pela metade esperando a etapa seguin
 | 11 | Observador de contexto (opt-in) | `src/observer/` |
 | 12 | Testes, assistente de instalação, documentação | `test/`, `src/cli/setup.ts` |
 
+**Todas as doze concluídas.** 212 testes automatizados, 37 ferramentas, build
+limpo e verificação de ponta a ponta com o sistema no ar.
+
 ## O que vem depois (ideias para evoluir)
 
 - Reconhecimento de voz local (Whisper) em vez do motor do navegador.

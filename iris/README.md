@@ -58,9 +58,10 @@ criptografado no seu banco local — nada é perdido.
   `docs/PERMISSOES.md`, mas leia antes o porquê.
 
 ### Ferramentas
-Arquivos, shell, navegador real (Playwright), busca e leitura na web, cofre de
-credenciais, agenda e lembretes, e-mail (IMAP/SMTP), consulta processual,
-WhatsApp e backup no Drive. Todas passam pelo broker de permissões.
+São **37**, todas passando pelo broker de permissões: arquivos, terminal,
+navegador real (Playwright, com login que persiste), busca e leitura na web,
+cofre de credenciais, memória, agenda e lembretes, e-mail (IMAP/SMTP), consulta
+processual no CNJ, WhatsApp, backup cifrado e o observador de contexto.
 
 ### Vida prática
 - Lembretes de audiência, compromisso e prazo, com aviso na tela e no WhatsApp.
@@ -82,16 +83,29 @@ WhatsApp e backup no Drive. Todas passam pelo broker de permissões.
 ## Comandos
 
 ```bash
-npm run setup                          # assistente de instalação
-npm start                              # sobe o servidor + canais
-npm run iris -- status                 # estado geral
-npm run iris -- memoria buscar "INSS"  # consulta a memória
-npm run iris -- permissoes             # lista e revoga autorizações
-npm run iris -- auditoria --hoje       # o que ela fez hoje
-npm run iris -- cofre set pje.senha    # guarda credencial (pede no terminal)
-npm run iris -- backup agora           # backup cifrado no Drive
-npm run iris -- observador on|off      # captura de contexto (opt-in)
-npm run iris -- panico                 # revoga tudo e tranca a chave
+npm run setup                           # assistente de instalação
+npm start                               # sobe o servidor e os canais
+npm run iris -- status                  # estado geral
+npm run iris -- conversar "..."         # uma pergunta pelo terminal
+
+npm run iris -- memoria listar          # o que ela lembra
+npm run iris -- memoria buscar "INSS"   # busca na memória
+npm run iris -- memoria perfil          # o retrato que ela fez de você
+npm run iris -- memoria consolidar      # roda a rotina noturna agora
+
+npm run iris -- permissoes              # o que está autorizado
+npm run iris -- permissoes conceder arquivo.ler '/home/eu/processos/**'
+npm run iris -- permissoes revogar-tudo
+
+npm run iris -- cofre set pje.senha     # guarda credencial (pede no terminal)
+npm run iris -- cofre listar            # nomes, nunca valores
+
+npm run iris -- auditoria --hoje        # o que ela fez hoje
+npm run iris -- backup agora            # backup cifrado
+npm run iris -- backup restaurar <arq>  # restaura
+npm run iris -- observador estado       # captura de contexto (opt-in)
+npm run iris -- senha                   # troca a senha-mestra
+npm run iris -- panico                  # revoga tudo e tranca as chaves
 ```
 
 ---
@@ -109,8 +123,22 @@ npm run iris -- panico                 # revoga tudo e tranca a chave
 | [docs/JUSTICA.md](docs/JUSTICA.md) | Consulta e monitoramento processual |
 | [docs/OBSERVADOR.md](docs/OBSERVADOR.md) | Captura de contexto e seus limites |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Etapas da construção |
+| [docs/PRIMEIROS-DIAS.md](docs/PRIMEIROS-DIAS.md) | O que fazer na primeira semana |
 
 ---
+
+## O estado do projeto
+
+212 testes automatizados cobrindo criptografia, memória, permissões, executor de
+ferramentas, agenda, WhatsApp, backup e observador — inclusive os casos que
+importam de verdade: que a senha nunca chega ao modelo, que a autorização não
+vaza de escopo, que o backup é ilegível sem a senha-mestra e que o observador
+nasce desligado.
+
+```bash
+npm test        # 212 testes
+npm run build   # compila
+```
 
 ## Três avisos honestos
 
