@@ -30,6 +30,17 @@ const log = createLogger('agente');
 
 const COMPACT_BETA = 'compact-2026-01-12';
 
+/**
+ * Ferramentas executadas no servidor da Anthropic: buscar e ler na internet.
+ * Não passam pelo broker porque não tocam a máquina do dono nem os dados dele —
+ * saem do datacenter, voltam com citação da fonte. O que sai *daqui* para a web
+ * continua sendo `baixar_pagina`, essa sim sob autorização por domínio.
+ */
+const SERVER_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
+  { type: 'web_search_20260209', name: 'web_search', max_uses: 8 },
+  { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 8, max_content_tokens: 60000 },
+];
+
 export interface TurnInput {
   conversationId: string;
   channel: string;
@@ -278,7 +289,9 @@ export class Agent {
       ],
       thinking: { type: 'adaptive', display: 'summarized' },
       output_config: { effort: this.cfg.model.effort },
-      tools: registry.toApiTools(),
+      tools: this.cfg.model.webSearch
+        ? [...registry.toApiTools(), ...SERVER_TOOLS]
+        : registry.toApiTools(),
       messages,
       stream: true,
     };

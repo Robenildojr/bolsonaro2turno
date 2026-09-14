@@ -57,6 +57,13 @@ export const ConfigSchema = z.object({
     maxTokens: num(32000),
     /** Compaction server-side: conversas sem limite de tamanho. */
     compaction: bool(true),
+    /**
+     * Busca e leitura na internet executadas no servidor da Anthropic.
+     * É por aqui que ela "aprende com a internet" no dia a dia, com citação da
+     * fonte. Desligue se preferir que toda saída para a web parta da sua máquina
+     * (aí sobra a ferramenta `baixar_pagina`, que pede autorização por domínio).
+     */
+    webSearch: bool(true),
   })
     .default({}),
 
@@ -214,6 +221,7 @@ function fromEnv(): Record<string, any> {
       effort: pick(e.IRIS_EFFORT),
       maxTokens: pick(e.IRIS_MAX_TOKENS),
       compaction: pick(e.IRIS_COMPACTION),
+      webSearch: pick(e.IRIS_WEB_SEARCH),
     },
     server: {
       host: pick(e.IRIS_HOST),
