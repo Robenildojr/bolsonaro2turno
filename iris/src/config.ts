@@ -57,14 +57,16 @@ export const ConfigSchema = z.object({
     maxTokens: num(32000),
     /** Compaction server-side: conversas sem limite de tamanho. */
     compaction: bool(true),
-  }),
+  })
+    .default({}),
 
   server: z.object({
     host: z.string().default('127.0.0.1'),
     port: num(4319),
     /** Token de acesso à UI local. Gerado no setup se ausente. */
     accessToken: z.string().optional(),
-  }),
+  })
+    .default({}),
 
   memory: z.object({
     /** Nº de memórias recuperadas e injetadas por turno. */
@@ -78,7 +80,8 @@ export const ConfigSchema = z.object({
     embeddingModel: z.string().default('voyage-3'),
     /** Consolidação noturna (cron). */
     consolidationCron: z.string().default('0 3 * * *'),
-  }),
+  })
+    .default({}),
 
   permissions: z.object({
     /**
@@ -94,7 +97,8 @@ export const ConfigSchema = z.object({
     confirmCritical: bool(true),
     /** Segundos até um pedido de permissão sem resposta ser negado. */
     requestTimeoutSec: num(300),
-  }),
+  })
+    .default({}),
 
   whatsapp: z.object({
     enabled: bool(false),
@@ -107,7 +111,8 @@ export const ConfigSchema = z.object({
     verifyToken: z.string().default(''),
     appSecret: z.string().default(''),
     graphVersion: z.string().default('v21.0'),
-  }),
+  })
+    .default({}),
 
   drive: z.object({
     enabled: bool(false),
@@ -116,7 +121,8 @@ export const ConfigSchema = z.object({
     backupCron: z.string().default('0 */6 * * *'),
     clientId: z.string().default(''),
     clientSecret: z.string().default(''),
-  }),
+  })
+    .default({}),
 
   email: z.object({
     enabled: bool(false),
@@ -127,14 +133,16 @@ export const ConfigSchema = z.object({
     user: z.string().default(''),
     /** A senha fica no cofre, nunca aqui. */
     pollCron: z.string().default('*/10 * * * *'),
-  }),
+  })
+    .default({}),
 
   justice: z.object({
     enabled: bool(true),
     /** Chave pública da API DataJud do CNJ (documentada e aberta). */
     datajudApiKey: z.string().default(''),
     monitorCron: z.string().default('0 8,14,19 * * *'),
-  }),
+  })
+    .default({}),
 
   observer: z.object({
     /** NUNCA liga sozinho. Requer consentimento explícito do dono. */
@@ -153,13 +161,15 @@ export const ConfigSchema = z.object({
         'sk-[A-Za-z0-9_\\-]{16,}',
         '\\b\\d{13,19}\\b',
       ]),
-  }),
+  })
+    .default({}),
 
   log: z.object({
     level: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
     /** Grava log em arquivo além do console. */
     toFile: bool(true),
-  }),
+  })
+    .default({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
