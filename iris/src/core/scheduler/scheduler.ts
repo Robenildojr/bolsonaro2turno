@@ -97,6 +97,16 @@ export async function startScheduler(cfg: Config = loadConfig()): Promise<Schedu
     );
   }
 
+  // ── digestão do observador ─────────────────────────────────────────────────
+  // Uma vez por dia: o material cru vira padrão, e o cru segue seu prazo.
+  if (cfg.observer.enabled) {
+    scheduler.agendar('observacoes', '15 3 * * *', async () => {
+      const { getObservador } = await import('../../observer/index.js');
+      const n = await getObservador().digerir();
+      if (n > 0) log.info('observações do dia viraram memória', { total: n });
+    });
+  }
+
   // ── panorama da manhã ──────────────────────────────────────────────────────
   scheduler.agendar('panorama', '0 7 * * 1-5', () => {
     const resumo = getAgenda().resumoParaContexto();

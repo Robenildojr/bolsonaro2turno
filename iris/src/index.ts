@@ -137,6 +137,17 @@ function optionalModules(cfg: Config, http: HttpChannel): OptionalModule[] {
     },
   ]);
 
+  if (cfg.observer.enabled) {
+    modulos.push([
+      'observador',
+      async () => {
+        const { startObserver, stopObserver } = await import('./observer/index.js');
+        await startObserver(cfg);
+        onShutdown(() => stopObserver());
+      },
+    ]);
+  }
+
   if (cfg.whatsapp.enabled) {
     modulos.push([
       'whatsapp',

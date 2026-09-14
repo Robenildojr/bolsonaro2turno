@@ -44,6 +44,8 @@ const AJUDA = `
   iris cofre set <nome>               guarda uma credencial (pergunta no terminal)
   iris cofre remover <nome>
 
+  iris observador [estado|ligar|desligar|pausar N|apagar]
+
   iris backup agora [--sem-drive]     gera um backup cifrado
   iris backup listar                  backups locais e no Drive
   iris backup autorizar               conecta o Google Drive
@@ -191,6 +193,9 @@ async function dispatch(comando: string, args: string[]): Promise<void> {
       console.log('');
       return;
     }
+
+    case 'observador':
+      return observadorCmd(args);
 
     case 'backup':
       return backupCmd(args, quando);
@@ -424,6 +429,79 @@ async function cofreCmd(args: string[], quando: (ts: number | null) => string): 
 
     default:
       console.log('  Subcomandos: listar, set, remover');
+  }
+}
+
+async function observadorCmd(args: string[]): Promise<void> {
+  const [sub = 'estado', ...rest] = args;
+  const { getObservador, RETENCAO_DIAS } = await import('../observer/index.js');
+  const { verificarDisponibilidade, descreverPlataforma } = await import('../observer/capture.js');
+  const obs = getObservador(loadConfig());
+
+  switch (sub) {
+    case 'ligar': {
+      const disp = await verificarDisponibilidade();
+      console.log(`\n  Plataforma: ${descreverPlataforma()}`);
+      console.log(`  Área de transferência: ${disp.clipboard ? 'disponível' : 'indisponível'}`);
+      console.log(`  Janela ativa: ${disp.janela ? 'disponível' : 'indisponível'}`);
+      if (disp.faltando.length) console.log(`  Falta: ${disp.faltando.join('; ')}`);
+
+      console.log('\n  O que vai acontecer enquanto estiver ligado:');
+      console.log('   · tudo que você copiar pode ser gravado (cifrado, nesta máquina);');
+      console.log('   · o título da janela ativa é registrado quando muda;');
+      console.log('   · senhas, tokens e janelas de gerenciador de senhas são ignorados;');
+      console.log(`   · o material cru se apaga sozinho em ${RETENCAO_DIAS} dias;`);
+      console.log('   · um indicador fica visível na tela o tempo todo.');
+      console.log('\n  Se você lida com informação de cliente, leia docs/OBSERVADOR.md antes.\n');
+
+      if (!(await confirm('  Ligar o observador?', false))) return console.log('  Cancelado.\n');
+
+      const ok = await obs.ligar(
+        { clipboard: disp.clipboard, janela: disp.janela },
+        { jaAutorizado: true },
+      );
+      console.log(ok ? '\n  ✓ Observador LIGADO.\n' : '\n  Não consegui ligar.\n');
+      return;
+    }
+
+    case 'desligar':
+      obs.desligar();
+      console.log('\n  ✓ Observador desligado.\n');
+      return;
+
+    case 'pausar': {
+      const minutos = Number(rest[0]) || 15;
+      obs.pausar(minutos);
+      console.log(`\n  ✓ Pausado por ${minutos} minutos.\n`);
+      return;
+    }
+
+    case 'apagar': {
+      const contagem = obs.contar();
+      console.log(`\n  Há ${contagem.total} observação(ões) guardada(s).`);
+      if (!(await confirm('  Apagar todas?', false))) return console.log('  Cancelado.\n');
+      console.log(`\n  ✓ ${obs.apagarTudo()} apagada(s). O que já virou memória continua.\n`);
+      return;
+    }
+
+    case 'digerir': {
+      console.log('  Transformando as observações em memória…');
+      const n = await obs.digerir();
+      console.log(`\n  ✓ ${n} memória(s) gerada(s).\n`);
+      return;
+    }
+
+    case 'estado':
+    default: {
+      const estado = obs.estado();
+      const contagem = obs.contar();
+      console.log(`\n  Observador: ${estado.ativo ? (estado.pausado ? 'LIGADO (pausado)' : 'LIGADO') : 'desligado'}`);
+      console.log(`  Fontes:     ${estado.fontes.join(', ') || 'nenhuma'}`);
+      console.log(`  Plataforma: ${estado.plataforma}`);
+      console.log(`  Guardadas:  ${contagem.total} (${contagem.naoProcessadas} não digeridas)`);
+      console.log(`  Retenção:   ${estado.retencaoDias} dias\n`);
+      return;
+    }
   }
 }
 

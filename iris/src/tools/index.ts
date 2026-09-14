@@ -9,6 +9,7 @@ import { getRegistry, type ToolDefinition } from '../core/agent/tools.js';
 import { createLogger } from '../util/logger.js';
 import { agendaTools, emailTools, justiceTools } from './agenda.tools.js';
 import { backupTools } from './backup.tools.js';
+import { observerTools } from './observer.tools.js';
 import { browserTools } from './browser.tools.js';
 import { fsTools } from './fs.tools.js';
 import { memoryTools } from './memory.tools.js';
@@ -40,6 +41,7 @@ export function registerCoreTools(opts: ToolSetOptions = {}): void {
     ...justiceTools,
     ...emailTools,
     ...backupTools,
+    ...observerTools,
     ...(opts.extra ?? []),
   ];
 
@@ -58,6 +60,7 @@ export {
   justiceTools,
   fsTools,
   memoryTools,
+  observerTools,
   shellTools,
   systemTools,
   vaultTools,
