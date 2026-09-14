@@ -142,9 +142,13 @@ export class Vault {
    * estrutura de argumentos de ferramenta. Referência inexistente vira erro —
    * é melhor a ferramenta falhar alto do que enviar um placeholder literal
    * para um formulário de login.
+   *
+   * Devolve também os valores aplicados, para que o executor possa apagá-los da
+   * saída da ferramenta antes de ela voltar ao modelo (`scrubSecrets`).
    */
-  resolveRefs<T>(input: T): { value: T; used: string[] } {
+  resolveRefs<T>(input: T): { value: T; used: string[]; values: string[] } {
     const used = new Set<string>();
+    const values = new Set<string>();
 
     const walk = (v: unknown, depth: number): unknown => {
       if (depth > 12) return v;
@@ -158,6 +162,7 @@ export class Vault {
             );
           }
           used.add(clean);
+          if (secret.length >= 4) values.add(secret);
           return secret;
         });
       }
@@ -172,7 +177,7 @@ export class Vault {
 
     const value = walk(input, 0) as T;
     if (used.size > 0) log.debug('credenciais aplicadas', { nomes: [...used] });
-    return { value, used: [...used] };
+    return { value, used: [...used], values: [...values] };
   }
 
   /** Detecta referências sem resolvê-las (para o broker de permissões avisar). */
@@ -191,6 +196,27 @@ export class Vault {
     walk(input, 0);
     return [...found];
   }
+}
+
+/**
+ * Apaga valores de credencial de um texto, trocando-os pela referência.
+ *
+ * Existe porque uma ferramenta pode devolver o segredo sem querer: um `cat` num
+ * arquivo de configuração, o HTML de uma página que reexibe o campo preenchido,
+ * uma mensagem de erro que ecoa o argumento recebido. Sem esta limpeza, o valor
+ * entraria no histórico da conversa, seria enviado à API e ficaria na auditoria
+ * — anulando a promessa de que o modelo nunca vê a senha.
+ */
+export function scrubSecrets(text: string, secrets: string[], label = '***'): string {
+  if (!text || secrets.length === 0) return text;
+  let out = text;
+  // Do maior para o menor: evita que um segredo curto, contido em outro maior,
+  // quebre a substituição do maior.
+  for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
+    if (secret.length < 4) continue;
+    out = out.split(secret).join(label);
+  }
+  return out;
 }
 
 function normalizeName(name: string): string {

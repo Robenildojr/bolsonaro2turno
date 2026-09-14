@@ -167,9 +167,7 @@ export class ConversationStore {
         out.push({ role: m.role, content: m.content });
       }
     }
-    // A API exige que a conversa comece por 'user'.
-    while (out.length > 0 && out[0]!.role !== 'user') out.shift();
-    return out;
+    return repairWindow(out);
   }
 
   countMessages(conversationId: string): number {
@@ -220,6 +218,49 @@ export class ConversationStore {
       createdAt: row.created_at,
     };
   }
+}
+
+/**
+ * Conserta a janela recortada do histórico.
+ *
+ * Pegar "as N últimas mensagens" pode cortar no meio de uma chamada de
+ * ferramenta, e a API rejeita os dois casos que isso gera:
+ *
+ *  - um `tool_result` órfão no começo, cujo `tool_use` ficou de fora da janela;
+ *  - um `tool_use` no fim sem o `tool_result` correspondente, que é o que
+ *    sobra quando o dono interrompe o turno no meio.
+ *
+ * Também garante que a conversa comece por `user`, como a API exige.
+ */
+function repairWindow(messages: Anthropic.Beta.BetaMessageParam[]): Anthropic.Beta.BetaMessageParam[] {
+  const out = [...messages];
+
+  // Começo: fora tudo que não seja um turno de usuário "de verdade".
+  while (out.length > 0) {
+    const first = out[0]!;
+    if (first.role !== 'user' || hasBlockType(first, 'tool_result')) {
+      out.shift();
+      continue;
+    }
+    break;
+  }
+
+  // Fim: fora a chamada de ferramenta que ficou sem resposta.
+  while (out.length > 0) {
+    const last = out[out.length - 1]!;
+    if (last.role === 'assistant' && hasBlockType(last, 'tool_use')) {
+      out.pop();
+      continue;
+    }
+    break;
+  }
+
+  return out;
+}
+
+function hasBlockType(message: Anthropic.Beta.BetaMessageParam, type: string): boolean {
+  if (typeof message.content === 'string') return false;
+  return (message.content as Array<{ type?: string }>).some((b) => b?.type === type);
 }
 
 interface ConversationRow {
