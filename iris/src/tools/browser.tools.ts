@@ -15,8 +15,25 @@ import { z } from 'zod';
 import { paths } from '../config.js';
 import { getBrowser } from '../integrations/browser/browser.js';
 import { domainScope } from '../core/permissions/capabilities.js';
+
 import type { ToolDefinition } from '../core/agent/tools.js';
 import { truncateForModel } from '../core/agent/tools.js';
+
+/**
+ * Escopo das ferramentas que agem sobre a página já aberta.
+ *
+ * Antes era `*`, e isso tinha uma consequência que só aparece depois: ao
+ * responder "sempre aqui" num pedido de `clicar`, a autorização era gravada com
+ * escopo `*` e passava a valer em **todos** os sites, para sempre. Bastaria a
+ * página seguinte ser de outra pessoa para um `preencher_campo` com
+ * `{{cofre:...}}` digitar a senha do PJe num formulário alheio.
+ *
+ * Agora o escopo é o domínio em que o navegador está de fato. Sem página
+ * aberta, devolve um valor que nenhum domínio casa — a autorização é pedida.
+ */
+function escopoDaPaginaAberta(): string {
+  return getBrowser().dominioAtual || '(nenhuma página aberta)';
+}
 
 const abrirPagina: ToolDefinition<{ url: string }> = {
   name: 'abrir_pagina',
@@ -29,7 +46,16 @@ const abrirPagina: ToolDefinition<{ url: string }> = {
     required: ['url'],
     properties: { url: { type: 'string', description: 'Endereço completo, com https://' } },
   },
-  validate: z.object({ url: z.string().url() }),
+  validate: z.object({
+    url: z
+      .string()
+      .url()
+      .refine((u) => /^https?:$/.test(safeProtocol(u)), {
+        message:
+          'só abro endereços http e https. `file:` daria acesso a qualquer arquivo do disco por ' +
+          'fora da autorização de arquivo, inclusive ao chaveiro da própria Íris.',
+      }),
+  }),
   scopeFrom: (i) => domainScope(i.url),
   summarize: (i) => `abrir ${i.url}`,
   timeoutMs: 120_000,
@@ -57,7 +83,7 @@ const lerPaginaAtual: ToolDefinition<{ incluir_campos: boolean }> = {
     properties: { incluir_campos: { type: 'boolean' } },
   },
   validate: z.object({ incluir_campos: z.boolean() }),
-  scopeFrom: () => '*',
+  scopeFrom: escopoDaPaginaAberta,
   summarize: () => 'ler a página aberta no navegador',
   async run(input) {
     const browser = getBrowser();
@@ -87,7 +113,7 @@ const preencherCampo: ToolDefinition<{ seletor: string; valor: string }> = {
     },
   },
   validate: z.object({ seletor: z.string().min(1), valor: z.string() }),
-  scopeFrom: () => '*',
+  scopeFrom: escopoDaPaginaAberta,
   summarize: (i) => `preencher ${i.seletor}`,
   async run(input) {
     const browser = getBrowser();
@@ -107,7 +133,7 @@ const clicar: ToolDefinition<{ seletor: string }> = {
     properties: { seletor: { type: 'string', description: 'Seletor CSS, ou text="Entrar" para achar pelo rótulo.' } },
   },
   validate: z.object({ seletor: z.string().min(1) }),
-  scopeFrom: () => '*',
+  scopeFrom: escopoDaPaginaAberta,
   summarize: (i) => `clicar em ${i.seletor}`,
   timeoutMs: 90_000,
   async run(input) {
@@ -136,7 +162,7 @@ const teclar: ToolDefinition<{ seletor: string; tecla: string }> = {
     },
   },
   validate: z.object({ seletor: z.string().min(1), tecla: z.string().min(1).max(20) }),
-  scopeFrom: () => '*',
+  scopeFrom: escopoDaPaginaAberta,
   summarize: (i) => `pressionar ${i.tecla} em ${i.seletor}`,
   async run(input) {
     const browser = getBrowser();
@@ -158,7 +184,7 @@ const capturarTela: ToolDefinition<{ nome: string }> = {
     properties: { nome: { type: 'string', description: 'Nome do arquivo, sem extensão.' } },
   },
   validate: z.object({ nome: z.string().min(1).max(80) }),
-  scopeFrom: () => '*',
+  scopeFrom: escopoDaPaginaAberta,
   summarize: () => 'capturar a tela do navegador',
   async run(input) {
     const safe = input.nome.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -181,6 +207,14 @@ const fecharNavegador: ToolDefinition<Record<string, never>> = {
     return { ok: true, content: 'Navegador fechado. O login continua salvo no perfil.' };
   },
 };
+
+function safeProtocol(url: string): string {
+  try {
+    return new URL(url).protocol;
+  } catch {
+    return '';
+  }
+}
 
 export const browserTools: Array<ToolDefinition<any>> = [
   abrirPagina,

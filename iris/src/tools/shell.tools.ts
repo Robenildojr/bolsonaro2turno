@@ -11,6 +11,7 @@
  * ser a linha inteira, para a autorização não ser mais larga do que parece.
  */
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import { z } from 'zod';
 import { resolvePath } from './fs.tools.js';
@@ -24,16 +25,76 @@ interface ShellInput {
   segundos: number;
 }
 
-/** Primeiro token real do comando, ignorando prefixos de ambiente. */
+/**
+ * Programas que executam **outro** programa. O escopo precisa atravessá-los.
+ *
+ * Sem isto, autorizar `env LANG=C pdftotext …` uma vez com "sempre" gravaria a
+ * autorização no nome `env` — e `env sh -c 'curl … | sh'` passaria direto,
+ * porque também começa com `env`. O mesmo vale para `sudo`, que seria ainda
+ * pior. A promessa da documentação ("autorizar sempre para git não libera rm")
+ * só se sustenta se o escopo for o programa que de fato roda.
+ */
+const INVOLUCROS = new Set([
+  'sudo',
+  'doas',
+  'env',
+  'nohup',
+  'nice',
+  'ionice',
+  'setsid',
+  'stdbuf',
+  'time',
+  'timeout',
+  'xargs',
+  'command',
+  'exec',
+]);
+
+/**
+ * O programa que realmente será executado, para servir de escopo.
+ *
+ * Deriva de `splitArgs` — os mesmos tokens que vão para o `spawn` — e não de um
+ * split por espaço à parte: duas formas diferentes de separar abririam a porta
+ * para o escopo divergir do que executa.
+ */
 export function commandScope(comando: string, usarShell: boolean): string {
-  if (usarShell) return comando.trim().slice(0, 200);
-  const tokens = comando.trim().split(/\s+/);
-  for (const token of tokens) {
-    if (/^[A-Z_][A-Z0-9_]*=/.test(token)) continue; // VAR=valor
-    if (token === 'sudo' || token === 'env' || token === 'nohup') return token;
-    return token;
+  if (usarShell) return escopoDeLinhaInteira(comando);
+
+  const tokens = splitArgs(comando);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue; // VAR=valor
+    if (!INVOLUCROS.has(basename(token))) return basename(token);
+    // É invólucro: pula as opções dele até achar o programa de verdade.
+    for (i++; i < tokens.length; i++) {
+      const proximo = tokens[i]!;
+      if (proximo.startsWith('-')) continue;
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(proximo)) continue;
+      // `timeout 30 curl …`: o argumento numérico é do invólucro, não o alvo.
+      if (/^\d+(\.\d+)?[smhd]?$/.test(proximo)) continue;
+      i--;
+      break;
+    }
   }
-  return comando.trim().slice(0, 60);
+  return comando.trim().slice(0, 60) || '(vazio)';
+}
+
+/** `/usr/bin/curl` e `curl` são o mesmo programa para efeito de autorização. */
+function basename(token: string): string {
+  const corte = Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\'));
+  return corte >= 0 ? token.slice(corte + 1) : token;
+}
+
+/**
+ * Com shell, o escopo é a linha inteira. Linhas longas ganham um resumo
+ * criptográfico no fim: cortar em 200 caracteres faria dois comandos com o
+ * mesmo prefixo compartilharem a mesma autorização gravada.
+ */
+function escopoDeLinhaInteira(comando: string): string {
+  const limpo = comando.trim();
+  if (limpo.length <= 200) return limpo;
+  const resumo = createHash('sha256').update(limpo).digest('hex').slice(0, 12);
+  return `${limpo.slice(0, 180)}…#${resumo}`;
 }
 
 /** Divide respeitando aspas, sem invocar shell. */
@@ -100,6 +161,8 @@ const executarComando: ToolDefinition<ShellInput> = {
     segundos: z.number().int().min(0).max(600),
   }),
   scopeFrom: (i) => commandScope(i.comando, i.usar_shell),
+  // O escopo é só o programa; a avaliação de irreversibilidade precisa da linha.
+  destructiveFrom: (i) => i.comando,
   summarize: (i) => `executar: ${i.comando.slice(0, 160)}`,
   timeoutMs: 620_000,
   async run(input, ctx) {

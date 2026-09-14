@@ -199,7 +199,7 @@ describe('escopo de comando', () => {
     assert.equal(commandScope('git status --short', false), 'git');
     assert.equal(commandScope('pdftotext arquivo.pdf -', false), 'pdftotext');
     assert.equal(commandScope('LANG=C ls -la', false), 'ls');
-    assert.equal(commandScope('sudo apt update', false), 'sudo');
+    assert.equal(commandScope('sudo apt update', false), 'apt', 'o escopo atravessa o sudo');
   });
 
   it('com shell, o escopo é a linha inteira — a autorização não fica mais larga do que parece', () => {

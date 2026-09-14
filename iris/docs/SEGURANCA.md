@@ -117,7 +117,46 @@ de o modelo já ter terminado de escrever. Consequências práticas:
   túnel autenticado (Tailscale, WireGuard, Cloudflare Access).
 - Todo acesso à UI e à API local exige o token de `IRIS_ACCESS_TOKEN`.
 - O webhook do WhatsApp valida a assinatura `X-Hub-Signature-256` da Meta e só
-  aceita mensagens do número do dono. Qualquer outro remetente é ignorado.
+  aceita mensagens do número do dono. Qualquer outro remetente é ignorado. A
+  validação é incondicional e `WHATSAPP_APP_SECRET` é obrigatória: o canal não
+  sobe sem ela. A URL do webhook é pública por necessidade — é a Meta que
+  precisa alcançá-la — então sem assinatura conferida ela seria acesso à sua
+  máquina por requisição HTTP.
+
+## O que a revisão da etapa 14 encontrou
+
+O sistema inteiro passou por uma revisão adversarial depois de pronto, com a
+pergunta invertida: não "isto funciona?", mas "como eu abusaria disto?". Seis
+falhas apareceram, todas na mesma família — o **portão de permissão concordava
+com uma coisa e o código executava outra**. Ficam registradas porque quem mexer
+nisto depois precisa saber o que já deu errado:
+
+1. **A confirmação de ação irreversível avaliava só o escopo.** O escopo de
+   `rm -rf /home/eu/processos` é `rm`, e `rm` sozinho não casa com padrão
+   destrutivo nenhum. O comando passava sem confirmar. Agora a avaliação recebe
+   a linha de comando inteira, separada do escopo de propósito.
+2. **Invólucros viravam escopo.** `env`, `sudo`, `timeout`, `xargs` e afins
+   eram gravados como o programa autorizado, então uma autorização dada para
+   `env LANG=C pdftotext` valia para `env sh -c 'curl … | sh'`. O escopo agora
+   atravessa o invólucro até o programa que de fato roda.
+3. **As ferramentas de navegador pediam escopo `*`.** Responder "sempre aqui" a
+   um `clicar` gravava autorização para **todos** os sites. Um
+   `preencher_campo` com `{{cofre:…}}` na página seguinte digitaria a sua senha
+   do PJe num formulário de outra pessoa. O escopo agora é o domínio aberto.
+4. **`abrir_pagina` aceitava `file:`**, o que lia qualquer arquivo do disco sob
+   uma capacidade de navegador — inclusive o chaveiro. Só `http` e `https`.
+5. **`baixar_pagina` gravava em disco com autorização de leitura web.** Uma
+   capacidade de risco baixo, com escopo de domínio, escrevia em `~/.bashrc` ou
+   em `~/.ssh/authorized_keys`. Agora pede `arquivo.escrever` para o caminho
+   alvo, além da autorização do domínio, e recusa caminho protegido.
+6. **O observador passava valores por `/bin/sh`.** O nome do aplicativo em foco
+   e o id da janela ativa no X11 entravam interpolados num `exec`. O id é uma
+   propriedade gravável por qualquer cliente X da mesma sessão: um aplicativo
+   bem nomeado executaria comando arbitrário a cada 2,5 segundos. Nada mais
+   passa por shell, e o id é validado contra `0x` + hexadecimal.
+
+Todas as seis têm teste de regressão em `test/seguranca.test.ts`, escrito para
+falhar contra o código anterior à correção.
 
 ## Botão de pânico
 

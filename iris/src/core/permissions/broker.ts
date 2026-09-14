@@ -39,6 +39,16 @@ export interface PermissionRequest {
   scope: string;
   /** Por que a Íris quer fazer isso — aparece no pedido. */
   reason: string;
+  /**
+   * A ação por extenso (a linha de comando inteira, o caminho completo).
+   *
+   * Separado de `scope` porque o escopo é deliberadamente estreito — `rm`, e
+   * não `rm -rf /home/eu` — para que uma autorização não fique mais larga do
+   * que aparenta. Mas a avaliação de irreversibilidade precisa do oposto: o
+   * texto completo. Quem só olhasse o escopo veria a palavra "rm" e deixaria
+   * passar.
+   */
+  actionText?: string;
   /** Contexto extra mostrado ao dono (argumentos resumidos). */
   details?: Record<string, unknown>;
   conversationId?: string | null;
@@ -103,7 +113,11 @@ export class PermissionBroker {
 
   async request(req: PermissionRequest): Promise<PermissionOutcome> {
     const spec = capabilitySpec(req.capability);
-    const destructive = isDestructive(req.capability, req.scope, JSON.stringify(req.details ?? {}));
+    const destructive = isDestructive(
+      req.capability,
+      req.scope,
+      `${req.actionText ?? ''} ${JSON.stringify(req.details ?? {})}`,
+    );
     const risk: Risk = destructive ? 'critico' : spec.risk;
 
     const grant = this.findGrant(req.capability, req.scope);

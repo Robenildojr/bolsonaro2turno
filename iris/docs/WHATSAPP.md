@@ -41,7 +41,8 @@ risco explicitamente (`WHATSAPP_ACEITO_RISCO=sim`).
    (`WHATSAPP_PHONE_NUMBER_ID`) e gere um **token de acesso permanente**
    (`WHATSAPP_ACCESS_TOKEN`) — o token temporário de 24h serve só para testar.
 4. Em *Configurações do app → Básico*, copie a **Chave secreta do app**
-   (`WHATSAPP_APP_SECRET`).
+   (`WHATSAPP_APP_SECRET`). **Obrigatória** — sem ela a Íris recusa subir o
+   canal, e o motivo está em *Segurança*, mais abaixo.
 5. Cadastre o número que vai atender.
 
 ### 2. No `.env`
@@ -52,7 +53,7 @@ WHATSAPP_PROVIDER=cloud
 WHATSAPP_OWNER=5596991234567        # SEU número, em E.164 sem o +
 WHATSAPP_PHONE_NUMBER_ID=...
 WHATSAPP_ACCESS_TOKEN=...
-WHATSAPP_APP_SECRET=...
+WHATSAPP_APP_SECRET=...                 # obrigatório: é o que autentica o webhook
 WHATSAPP_VERIFY_TOKEN=escolha-uma-frase-qualquer
 ```
 
@@ -125,6 +126,16 @@ Grupos são ignorados sempre, em qualquer provedor.
 O webhook confere a assinatura `X-Hub-Signature-256` sobre o **corpo cru** da
 requisição. Reserializar o JSON muda os bytes e a conferência falharia sempre —
 por isso o servidor guarda o corpo original antes de interpretá-lo.
+
+**A conferência é incondicional, e `WHATSAPP_APP_SECRET` é obrigatória.** Antes,
+sem o segredo configurado, a checagem era pulada e o webhook aceitava qualquer
+corpo. Isso é mais grave do que parece: a URL do túnel é pública por definição —
+é a Meta que precisa alcançá-la — e um POST forjado com o seu número no campo
+`from` passaria pela lista do dono. Quem descobrisse o endereço teria a Íris
+inteira: o seu computador, o seu cofre, o seu e-mail.
+
+Por isso o canal **não sobe** sem o segredo, em vez de subir com um aviso no
+log. Um aviso se perde no meio do arranque; uma recusa, não.
 
 ---
 

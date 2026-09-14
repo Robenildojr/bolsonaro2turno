@@ -15,6 +15,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { paths } from '../config.js';
 import { domainScope } from '../core/permissions/capabilities.js';
+import { getBroker } from '../core/permissions/broker.js';
+import { isProtectedPath, resolvePath } from './fs.tools.js';
 import type { ToolDefinition } from '../core/agent/tools.js';
 import { truncateForModel } from '../core/agent/tools.js';
 
@@ -68,7 +70,8 @@ const baixarPagina: ToolDefinition<{
       },
       salvar_em: {
         type: 'string',
-        description: 'Caminho para salvar o arquivo baixado. Vazio = só devolver o texto.',
+        description:
+          'Caminho para salvar o arquivo baixado. Vazio = só devolver o texto. Gravar em disco pede autorização de escrita separada, além da de leitura web.',
       },
     },
   },
@@ -106,7 +109,37 @@ const baixarPagina: ToolDefinition<{
     const contentType = res.headers.get('content-type') ?? '';
 
     if (input.salvar_em) {
-      const target = path.resolve(input.salvar_em);
+      /*
+       * Gravar em disco é `arquivo.escrever`, não `web.ler`.
+       *
+       * Sem esta segunda autorização, uma capacidade documentada como de risco
+       * baixo ("ler páginas da internet"), com escopo de domínio, escreveria em
+       * qualquer caminho — ~/.bashrc, ~/.ssh/authorized_keys, o config.json da
+       * própria Íris. O pedido que o dono viu falava de um site; o efeito seria
+       * execução de código na próxima vez que ele abrisse um terminal.
+       */
+      const target = resolvePath(input.salvar_em);
+      if (isProtectedPath(target)) {
+        return {
+          ok: false,
+          content: 'esse caminho é material criptográfico da Íris ou credencial do sistema.',
+        };
+      }
+
+      const permitido = await getBroker().request({
+        capability: 'arquivo.escrever',
+        scope: target,
+        reason: `gravar em ${target} o conteúdo baixado de ${input.url}`,
+        actionText: target,
+        details: { ferramenta: 'baixar_pagina', origem: input.url },
+      });
+      if (!permitido.allowed) {
+        return {
+          ok: false,
+          content: `Não autorizado a gravar em ${target}. Posso devolver o conteúdo sem salvar.`,
+        };
+      }
+
       await fs.mkdir(path.dirname(target), { recursive: true });
       const buffer = Buffer.from(await res.arrayBuffer());
       await fs.writeFile(target, buffer);

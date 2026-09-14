@@ -38,6 +38,29 @@ interface WebhookPayload {
   }>;
 }
 
+/**
+ * Confere a assinatura da Meta sobre o corpo cru.
+ *
+ * Fora da classe para poder ser testada como função pura: este é o único ponto
+ * que separa "mensagem do dono" de "mensagem de quem descobriu a URL do túnel",
+ * e um controle de acesso sem teste é um controle de acesso por esperança.
+ */
+export function assinaturaValida(corpo: string, cabecalho: string, appSecret: string): boolean {
+  // Sem segredo configurado não há o que conferir — e passar adiante nesse caso
+  // seria aceitar qualquer corpo. `iniciar()` já recusa subir assim; isto é a
+  // segunda tranca, para o caso de alguém instanciar o provedor por outro caminho.
+  if (!appSecret) return false;
+  if (!cabecalho.startsWith('sha256=')) return false;
+
+  const recebido = cabecalho.slice(7);
+  // Sem esta checagem, um cabeçalho não-hexadecimal faria o Buffer.from vir
+  // curto e o timingSafeEqual lançar — erro 500 em vez de 401.
+  if (!/^[0-9a-f]{64}$/i.test(recebido)) return false;
+
+  const esperado = createHmac('sha256', appSecret).update(corpo, 'utf8').digest('hex');
+  return timingSafeEqual(Buffer.from(recebido, 'hex'), Buffer.from(esperado, 'hex'));
+}
+
 export class CloudApiProvider implements WhatsAppProvider {
   readonly nome = 'cloud';
   private handler: ((msg: MensagemRecebida) => void | Promise<void>) | null = null;
@@ -63,10 +86,22 @@ export class CloudApiProvider implements WhatsAppProvider {
     if (!verifyToken) {
       throw new Error('defina WHATSAPP_VERIFY_TOKEN (você escolhe o valor; a Meta só confere)');
     }
+    /*
+     * Sem segredo do app não há webhook.
+     *
+     * Antes isto era um aviso e a verificação ficava condicional — o que
+     * significa que a instalação subia funcionando e qualquer um que achasse a
+     * URL podia forjar uma mensagem "vinda do dono" e comandar a Íris: shell,
+     * arquivos, cofre. O webhook precisa ser alcançável pela internet para a
+     * Cloud API funcionar, então o segredo é o único controle que existe aqui.
+     * Falhar no arranque é bem melhor que rodar aberto.
+     */
     if (!this.cfg.whatsapp.appSecret) {
-      log.warn(
-        'WHATSAPP_APP_SECRET vazio: as mensagens não terão assinatura conferida. ' +
-          'Preencha antes de expor o webhook na internet.',
+      throw new Error(
+        'WHATSAPP_APP_SECRET está vazio. Sem ele eu não consigo distinguir uma mensagem da Meta ' +
+          'de uma forjada por quem descobrir a URL do webhook — e quem forja passa a comandar a ' +
+          'Íris no seu lugar. Pegue a chave secreta em Configurações do app → Básico, no painel ' +
+          'da Meta, e ponha em WHATSAPP_APP_SECRET.',
       );
     }
 
@@ -164,7 +199,8 @@ export class CloudApiProvider implements WhatsAppProvider {
       const assinatura = (req.headers['x-hub-signature-256'] as string | undefined) ?? '';
       const cru = (req as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
 
-      if (this.cfg.whatsapp.appSecret && !this.assinaturaValida(cru, assinatura)) {
+      // Incondicional: sem assinatura válida, não passa.
+      if (!this.assinaturaValida(cru, assinatura)) {
         log.warn('webhook recusado: assinatura inválida');
         return reply.code(401).send('assinatura inválida');
       }
@@ -177,13 +213,7 @@ export class CloudApiProvider implements WhatsAppProvider {
   }
 
   private assinaturaValida(corpo: string, cabecalho: string): boolean {
-    if (!cabecalho.startsWith('sha256=')) return false;
-    const esperado = createHmac('sha256', this.cfg.whatsapp.appSecret)
-      .update(corpo, 'utf8')
-      .digest('hex');
-    const recebido = cabecalho.slice(7);
-    if (recebido.length !== esperado.length) return false;
-    return timingSafeEqual(Buffer.from(recebido, 'hex'), Buffer.from(esperado, 'hex'));
+    return assinaturaValida(corpo, cabecalho, this.cfg.whatsapp.appSecret);
   }
 
   private async processar(payload: WebhookPayload): Promise<void> {

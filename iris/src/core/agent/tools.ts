@@ -64,6 +64,15 @@ export interface ToolDefinition<I = Record<string, unknown>> {
   scopeFrom?: (input: I) => string;
   /** Frase curta mostrada na UI e gravada na auditoria. */
   summarize?: (input: I) => string;
+  /**
+   * Texto que a avaliação de irreversibilidade deve examinar.
+   *
+   * Existe porque o **escopo** da autorização e a **ação** não são a mesma
+   * coisa: o escopo do terminal é só o programa (`rm`), e é nos argumentos que
+   * mora o `-rf /home/eu/processos`. Sem esta ponte, o portão de confirmação
+   * avaliaria a palavra "rm" isolada e deixaria passar.
+   */
+  destructiveFrom?: (input: I) => string;
   /** Prazo máximo de execução. Padrão: 2 minutos. */
   timeoutMs?: number;
   run(input: I, ctx: ToolContext): Promise<ToolResult>;
@@ -145,6 +154,7 @@ export class ToolRegistry {
           capability: tool.capability,
           scope,
           reason: summary,
+          actionText: safeDestructiveText(tool, input, summary),
           details: {
             ferramenta: name,
             ...(refs.length ? { credenciais: refs } : {}),
@@ -248,6 +258,15 @@ function safeSummary(tool: ToolDefinition<any>, input: unknown): string {
     return tool.summarize ? tool.summarize(input) : tool.name;
   } catch {
     return tool.name;
+  }
+}
+
+/** O texto completo da ação, para a checagem de irreversibilidade. */
+function safeDestructiveText(tool: ToolDefinition<any>, input: unknown, fallback: string): string {
+  try {
+    return tool.destructiveFrom ? tool.destructiveFrom(input) : fallback;
+  } catch {
+    return fallback;
   }
 }
 

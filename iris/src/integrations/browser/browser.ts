@@ -43,6 +43,15 @@ export class BrowserSession {
   private context: PwContext | null = null;
   private page: PwPage | null = null;
   private available: boolean | null = null;
+  /**
+   * Último endereço conhecido, mantido de forma síncrona.
+   *
+   * As ferramentas derivam o escopo da autorização daqui. Ler a página é
+   * assíncrono e `scopeFrom` não é — sem este cache, as ferramentas de
+   * interação teriam de pedir escopo `*`, e uma autorização "sempre" dada num
+   * site valeria em todos.
+   */
+  private ultimoUrl = '';
 
   async isAvailable(): Promise<boolean> {
     if (this.available !== null) return this.available;
@@ -94,17 +103,41 @@ export class BrowserSession {
     return this.page;
   }
 
+  /** Domínio da página aberta agora. Vazio quando não há nada aberto. */
+  get dominioAtual(): string {
+    try {
+      return this.ultimoUrl ? new URL(this.ultimoUrl).hostname.toLowerCase() : '';
+    } catch {
+      return '';
+    }
+  }
+
+  get urlAtual(): string {
+    return this.ultimoUrl;
+  }
+
   async goto(url: string): Promise<{ title: string; url: string }> {
     const page = await this.currentPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     // Sites de tribunal costumam montar a tela depois do load inicial.
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-    return { title: await page.title(), url: page.url() };
+    this.ultimoUrl = page.url();
+    return { title: await page.title(), url: this.ultimoUrl };
+  }
+
+  /** Reconcilia o cache com a página de verdade (ela pode ter navegado sozinha). */
+  private async sincronizarUrl(page: PwPage): Promise<void> {
+    try {
+      this.ultimoUrl = page.url();
+    } catch {
+      /* página fechada no meio */
+    }
   }
 
   /** Texto legível da página, sem script, estilo e navegação repetida. */
   async readText(): Promise<string> {
     const page = await this.currentPage();
+    await this.sincronizarUrl(page);
     return page.evaluate(`(() => {
       const lixo = document.querySelectorAll('script, style, noscript, svg, iframe');
       lixo.forEach((el) => el.remove());
@@ -146,12 +179,14 @@ export class BrowserSession {
     await page.waitForSelector(selector, { timeout: 20_000, state: 'visible' });
     await page.click(selector, { timeout: 20_000 });
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+    await this.sincronizarUrl(page);
   }
 
   async press(selector: string, key: string): Promise<void> {
     const page = await this.currentPage();
     await page.press(selector, key, { timeout: 20_000 });
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+    await this.sincronizarUrl(page);
   }
 
   async screenshot(file: string): Promise<string> {
@@ -169,6 +204,7 @@ export class BrowserSession {
     } finally {
       this.context = null;
       this.page = null;
+      this.ultimoUrl = '';
     }
   }
 

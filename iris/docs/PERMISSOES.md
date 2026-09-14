@@ -68,6 +68,43 @@ caminho que você descreveu.
 
 Capacidade fora do catálogo é tratada como **alto risco** por precaução.
 
+### Onde o escopo do terminal é medido
+
+O escopo de `shell.executar` é o **programa que de fato roda**, e não o primeiro
+token da linha. A diferença importa:
+
+```
+sudo rm -rf /              → escopo: rm          (não "sudo")
+env LANG=C pdftotext a.pdf → escopo: pdftotext   (não "env")
+timeout 30 curl http://x   → escopo: curl        (não "timeout")
+/usr/bin/curl http://x     → escopo: curl        (caminho e nome são o mesmo)
+```
+
+Se o escopo parasse no primeiro token, autorizar "sempre" para converter um PDF
+com `env LANG=C pdftotext` gravaria a autorização no nome `env` — e
+`env sh -c '…'` passaria direto, porque também começa com `env`. A promessa
+desta página ("autorizar sempre para `git` não libera `rm`") só se sustenta
+atravessando esses invólucros: `sudo`, `env`, `nohup`, `nice`, `timeout`,
+`xargs`, `command`, `exec` e companhia.
+
+Com `usar_shell`, o escopo é a linha inteira. Linha acima de 200 caracteres
+ganha um resumo criptográfico no fim, para que dois comandos com o mesmo começo
+longo não compartilhem a mesma autorização gravada.
+
+### Navegador: o escopo é o site que está aberto
+
+`clicar`, `preencher_campo`, `teclar`, `ler_pagina_atual` e `capturar_tela` agem
+sobre a página já aberta — o endereço não está nos argumentos delas. O escopo
+dessas cinco é o **domínio em que o navegador está naquele instante**.
+
+Isso é o que impede que um "sempre aqui" dado no PJe do TRT-8 valha para o
+site seguinte, qualquer que seja ele. Sem página aberta, o escopo não casa com
+domínio nenhum e a autorização é pedida.
+
+`abrir_pagina` aceita apenas `http` e `https`. `file:` daria leitura de qualquer
+arquivo do disco por fora da autorização de arquivo — inclusive do chaveiro da
+própria Íris.
+
 ## A única coisa que continua perguntando
 
 Ações **irreversíveis** confirmam mesmo com autorização gravada:
@@ -82,6 +119,12 @@ Isso **não é desconfiança do modelo**. É que um `rm -rf` no caminho errado n
 tem desfazer, e dois segundos de confirmação são baratos perto de perder a pasta
 de processos. Um `ls -la` com a mesma autorização de shell passa direto — o
 atrito só aparece onde o erro é permanente.
+
+A avaliação examina a **linha de comando inteira**, não o escopo. São coisas
+diferentes de propósito: o escopo é estreito (`rm`) para que a autorização
+gravada seja estreita, mas o `-rf /home/eu/processos` mora nos argumentos. Fosse
+só o escopo, a confirmação avaliaria a palavra `rm` isolada — que não casa com
+padrão destrutivo nenhum — e deixaria passar.
 
 ### Desligando
 
