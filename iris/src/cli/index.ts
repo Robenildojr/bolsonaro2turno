@@ -44,6 +44,11 @@ const AJUDA = `
   iris cofre set <nome>               guarda uma credencial (pergunta no terminal)
   iris cofre remover <nome>
 
+  iris backup agora [--sem-drive]     gera um backup cifrado
+  iris backup listar                  backups locais e no Drive
+  iris backup autorizar               conecta o Google Drive
+  iris backup restaurar <arquivo>     restaura de um backup
+
   iris auditoria [--hoje] [--limite N] [--acao prefixo]
   iris senha                          troca a senha-mestra
   iris panico                         revoga tudo e tranca as chaves
@@ -186,6 +191,9 @@ async function dispatch(comando: string, args: string[]): Promise<void> {
       console.log('');
       return;
     }
+
+    case 'backup':
+      return backupCmd(args, quando);
 
     case 'senha': {
       const atual = await askSecret('  Senha atual: ');
@@ -416,6 +424,88 @@ async function cofreCmd(args: string[], quando: (ts: number | null) => string): 
 
     default:
       console.log('  Subcomandos: listar, set, remover');
+  }
+}
+
+async function backupCmd(args: string[], quando: (ts: number | null) => string): Promise<void> {
+  const [sub = 'agora', ...rest] = args;
+  const { getBackup } = await import('../integrations/drive/backup.js');
+  const backup = getBackup(loadConfig());
+
+  switch (sub) {
+    case 'agora': {
+      const senha = process.env.IRIS_PASSPHRASE ?? (await askSecret('  Confirme a senha-mestra: '));
+      if (!getKeyring().unlocked) getKeyring().unlock(senha);
+      console.log('\n  Gerando o pacote cifrado…');
+      const r = await backup.executar(senha, { enviarAoDrive: !args.includes('--sem-drive') });
+      console.log(`\n  ✓ ${r.arquivo} (${Math.round(r.bytes / 1024)} KB)`);
+      console.log(`  Local:  ${r.local}`);
+      console.log(r.drive ? '  Drive:  enviado, já cifrado' : '  Drive:  não enviado');
+      console.log(`\n${r.resumo.split('\n').map((l) => `  ${l}`).join('\n')}\n`);
+      return;
+    }
+
+    case 'listar': {
+      const locais = await backup.listarLocais();
+      console.log('');
+      if (locais.length === 0) {
+        console.log('  Nenhum backup local.');
+      } else {
+        console.log('  LOCAIS:');
+        for (const b of locais) {
+          console.log(`   ${b.arquivo}  ${String(Math.round(b.bytes / 1024)).padStart(6)} KB  ${quando(b.em.getTime())}`);
+        }
+      }
+      if (backup.driveConfigurado && backup.driveAutorizado) {
+        try {
+          const noDrive = await backup.listarNoDrive();
+          console.log('\n  NO DRIVE:');
+          for (const b of noDrive) {
+            console.log(
+              `   ${b.name}  ${String(Math.round(b.size / 1024)).padStart(6)} KB  ${quando(Date.parse(b.createdTime))}`,
+            );
+          }
+        } catch (err) {
+          console.log(`\n  Drive indisponível: ${describeError(err)}`);
+        }
+      }
+      console.log('');
+      return;
+    }
+
+    case 'autorizar': {
+      await backup.autorizarDrive();
+      console.log('\n  ✓ Google Drive conectado. O token ficou no cofre cifrado.\n');
+      return;
+    }
+
+    case 'restaurar': {
+      const arquivo = rest[0];
+      if (!arquivo) return console.log('  Use: iris backup restaurar <caminho do arquivo .iris>');
+      const senha = await askSecret('  Senha-mestra do backup: ');
+
+      const conteudo = await backup.inspecionar({ arquivo }, senha);
+      console.log('\n  Este backup contém:');
+      console.log(
+        (await import('../integrations/drive/bundle.js')).resumirBackup(conteudo)
+          .split('\n')
+          .map((l) => `    ${l}`)
+          .join('\n'),
+      );
+      console.log('\n  A restauração ACRESCENTA: nada do que existe hoje será apagado.');
+      if (!(await confirm('  Restaurar?', false))) return console.log('  Cancelado.');
+
+      const contagem = await backup.restaurar(conteudo);
+      console.log('');
+      for (const [chave, valor] of Object.entries(contagem)) {
+        console.log(`  ${chave.padEnd(14)} ${valor} restaurado(s)`);
+      }
+      console.log('');
+      return;
+    }
+
+    default:
+      console.log('  Subcomandos: agora, listar, autorizar, restaurar');
   }
 }
 

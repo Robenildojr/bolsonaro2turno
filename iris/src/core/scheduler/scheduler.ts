@@ -80,6 +80,23 @@ export async function startScheduler(cfg: Config = loadConfig()): Promise<Schedu
     });
   }
 
+  // ── backup cifrado ─────────────────────────────────────────────────────────
+  // A senha-mestra precisa estar no ambiente para o backup automático rodar:
+  // a chave do pacote é derivada dela, e é isso que permite restaurar em outra
+  // máquina. Sem ela, o backup fica manual (`iris backup agora`).
+  if (process.env.IRIS_PASSPHRASE) {
+    scheduler.agendar('backup', cfg.drive.backupCron, async () => {
+      const { getBackup } = await import('../../integrations/drive/backup.js');
+      const r = await getBackup(cfg).executar(process.env.IRIS_PASSPHRASE!);
+      log.info('backup automático', { arquivo: r.arquivo, drive: Boolean(r.drive) });
+    });
+  } else {
+    log.info(
+      'backup automático desligado: IRIS_PASSPHRASE não está no ambiente. ' +
+        'Use `iris backup agora` quando quiser gerar um.',
+    );
+  }
+
   // ── panorama da manhã ──────────────────────────────────────────────────────
   scheduler.agendar('panorama', '0 7 * * 1-5', () => {
     const resumo = getAgenda().resumoParaContexto();
