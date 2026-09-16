@@ -255,7 +255,71 @@ function repairWindow(messages: Anthropic.Beta.BetaMessageParam[]): Anthropic.Be
     break;
   }
 
+  return responderChamadasPendentes(out);
+}
+
+/**
+ * Responde toda chamada de ferramenta que ficou sem resposta **no meio** da
+ * conversa.
+ *
+ * Consertar só as pontas não bastava, e o caso que provou isso aconteceu na
+ * instalação do dono: o navegador falhou, o modelo recusou a ação seguinte, e o
+ * turno morreu deixando um `tool_use` gravado sem o `tool_result` dele. A
+ * conversa continuou por cima. Daí em diante **toda** mensagem reenviava aquele
+ * histórico e a API devolvia 400 — a conversa ficou morta para sempre, e nem
+ * recarregar a página resolvia.
+ *
+ * A resposta sintética diz a verdade — a ferramenta não completou — em vez de
+ * apagar a chamada. Apagar reescreveria o passado: o modelo tentou, e saber que
+ * tentou e falhou é informação útil para ele não repetir o mesmo caminho.
+ */
+function responderChamadasPendentes(
+  messages: Anthropic.Beta.BetaMessageParam[],
+): Anthropic.Beta.BetaMessageParam[] {
+  const out: Anthropic.Beta.BetaMessageParam[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+    out.push(msg);
+
+    if (msg.role !== 'assistant') continue;
+    const chamadas = idsDeBloco(msg, 'tool_use');
+    if (!chamadas.length) continue;
+
+    const proxima = messages[i + 1];
+    const respondidas = new Set(proxima ? idsDeBloco(proxima, 'tool_result') : []);
+    const faltando = chamadas.filter((id) => !respondidas.has(id));
+    if (!faltando.length) continue;
+
+    const remendos = faltando.map((id) => ({
+      type: 'tool_result' as const,
+      tool_use_id: id,
+      is_error: true,
+      content: 'A ferramenta não chegou a responder — o turno foi interrompido antes.',
+    }));
+
+    // Já existe um turno de resultados logo depois: acrescenta os que faltam
+    // ali dentro, porque a API exige todos os resultados na MESMA mensagem.
+    if (proxima?.role === 'user' && hasBlockType(proxima, 'tool_result')) {
+      const conteudo = Array.isArray(proxima.content) ? proxima.content : [];
+      messages[i + 1] = { ...proxima, content: [...remendos, ...conteudo] } as typeof proxima;
+      continue;
+    }
+
+    out.push({ role: 'user', content: remendos });
+  }
+
   return out;
+}
+
+/** Ids dos blocos de um tipo dentro de uma mensagem. */
+function idsDeBloco(message: Anthropic.Beta.BetaMessageParam, type: 'tool_use' | 'tool_result'): string[] {
+  if (typeof message.content === 'string') return [];
+  const chave = type === 'tool_use' ? 'id' : 'tool_use_id';
+  return (message.content as unknown as Array<Record<string, unknown>>)
+    .filter((b) => b?.type === type)
+    .map((b) => String(b[chave] ?? ''))
+    .filter(Boolean);
 }
 
 function hasBlockType(message: Anthropic.Beta.BetaMessageParam, type: string): boolean {

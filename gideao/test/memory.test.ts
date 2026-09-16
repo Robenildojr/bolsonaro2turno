@@ -264,6 +264,99 @@ describe('conversas', () => {
     const api = cs.toApiMessages(conv.id, 10);
     assert.equal(api[0]!.role, 'user');
   });
+
+  /**
+   * A conversa que morre para sempre.
+   *
+   * Um `tool_use` gravado sem o `tool_result` dele, com a conversa continuando
+   * por cima, faz a API devolver 400 em TODA mensagem seguinte — não dá para
+   * sair disso recarregando a página nem reiniciando. Aconteceu de verdade na
+   * instalação do dono: o navegador falhou, o modelo recusou a ação seguinte, e
+   * o turno morreu no meio.
+   */
+  it('responde chamada de ferramenta que ficou pendurada no meio da conversa', () => {
+    const cs = conversations();
+    const conv = cs.create('web');
+    const anexar = (role: 'user' | 'assistant', blocks: unknown[]) =>
+      cs.append({ conversationId: conv.id, role, content: 'x', channel: 'web', blocks: blocks as never });
+
+    anexar('user', [{ type: 'text', text: 'abre o processo' }]);
+    // O turno que morreu: chamou a ferramenta e nunca recebeu resposta.
+    anexar('assistant', [{ type: 'tool_use', id: 'toolu_perdida', name: 'abrir_pagina', input: {} }]);
+    // E a conversa seguiu por cima, que é o que torna o defeito permanente.
+    anexar('user', [{ type: 'text', text: 'e aí, conseguiu?' }]);
+    anexar('assistant', [{ type: 'text', text: 'deixa eu ver' }]);
+
+    const api = cs.toApiMessages(conv.id, 20);
+
+    const chamadas: string[] = [];
+    const respostas: string[] = [];
+    for (const m of api) {
+      for (const b of (m.content as Array<Record<string, unknown>>) ?? []) {
+        if (b?.type === 'tool_use') chamadas.push(String(b.id));
+        if (b?.type === 'tool_result') respostas.push(String(b.tool_use_id));
+      }
+    }
+
+    assert.ok(chamadas.includes('toolu_perdida'), 'a chamada continua no histórico');
+    assert.ok(respostas.includes('toolu_perdida'), 'e agora tem resposta — senão a API recusa tudo');
+
+    // A resposta sintética tem que vir IMEDIATAMENTE depois da chamada.
+    const iChamada = api.findIndex((m) =>
+      ((m.content as Array<Record<string, unknown>>) ?? []).some((b) => b?.type === 'tool_use'),
+    );
+    const seguinte = api[iChamada + 1];
+    assert.equal(seguinte?.role, 'user');
+    assert.ok(
+      ((seguinte!.content as Array<Record<string, unknown>>) ?? []).some(
+        (b) => b?.type === 'tool_result' && b.tool_use_id === 'toolu_perdida',
+      ),
+    );
+  });
+
+  it('não mexe numa conversa onde toda chamada já tem resposta', () => {
+    const cs = conversations();
+    const conv = cs.create('web');
+    const anexar = (role: 'user' | 'assistant', blocks: unknown[]) =>
+      cs.append({ conversationId: conv.id, role, content: 'x', channel: 'web', blocks: blocks as never });
+
+    anexar('user', [{ type: 'text', text: 'oi' }]);
+    anexar('assistant', [{ type: 'tool_use', id: 'toolu_ok', name: 'info_sistema', input: {} }]);
+    anexar('user', [{ type: 'tool_result', tool_use_id: 'toolu_ok', content: 'tudo certo' }]);
+    anexar('assistant', [{ type: 'text', text: 'pronto' }]);
+
+    const api = cs.toApiMessages(conv.id, 20);
+    assert.equal(api.length, 4, 'nada deveria ter sido acrescentado');
+  });
+
+  it('atende as duas chamadas quando o modelo pede ferramentas em paralelo', () => {
+    const cs = conversations();
+    const conv = cs.create('web');
+    const anexar = (role: 'user' | 'assistant', blocks: unknown[]) =>
+      cs.append({ conversationId: conv.id, role, content: 'x', channel: 'web', blocks: blocks as never });
+
+    anexar('user', [{ type: 'text', text: 'faz as duas coisas' }]);
+    anexar('assistant', [
+      { type: 'tool_use', id: 'toolu_a', name: 'um', input: {} },
+      { type: 'tool_use', id: 'toolu_b', name: 'dois', input: {} },
+    ]);
+    // Só uma respondeu — a API exige as duas na MESMA mensagem de resultados.
+    anexar('user', [{ type: 'tool_result', tool_use_id: 'toolu_a', content: 'feito' }]);
+    anexar('assistant', [{ type: 'text', text: 'e a outra?' }]);
+
+    const api = cs.toApiMessages(conv.id, 20);
+    const resultados = api.flatMap((m) =>
+      ((m.content as Array<Record<string, unknown>>) ?? [])
+        .filter((b) => b?.type === 'tool_result')
+        .map((b) => String(b.tool_use_id)),
+    );
+    assert.deepEqual(resultados.sort(), ['toolu_a', 'toolu_b']);
+
+    const comResultados = api.filter((m) =>
+      ((m.content as Array<Record<string, unknown>>) ?? []).some((b) => b?.type === 'tool_result'),
+    );
+    assert.equal(comResultados.length, 1, 'os dois resultados vão na mesma mensagem');
+  });
 });
 
 describe('envelhecimento e fusão', () => {
