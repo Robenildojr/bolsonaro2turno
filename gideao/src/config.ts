@@ -218,6 +218,14 @@ export const ConfigSchema = z.object({
     legendas: bool(true),
     /** Matiz do orbe, 0–360. 258 é o violeta padrão. */
     matiz: num(258),
+    /**
+     * Abrir o navegador sozinho ao subir, já com o token.
+     *
+     * Sem isto, todo arranque termina com o dono procurando uma URL de oitenta
+     * caracteres no meio do log para copiar à mão — e sem o token a página
+     * responde "acesso negado".
+     */
+    abrirNavegador: bool(true),
   })
     .default({}),
 

@@ -47,6 +47,25 @@ Se aparecer *"nenhuma voz em português instalada"*, o sistema não tem voz pt-B
 No Windows isso se resolve em Configurações → Hora e idioma → Idioma → Português
 (Brasil) → Opções → Voz.
 
+## Ligar sem terminal
+
+No Windows, rode uma vez, dentro da pasta do projeto:
+
+```powershell
+.\criar-atalho.ps1
+```
+
+Isso põe um atalho **Gideão** na sua área de trabalho. Daí em diante é clicar
+duas vezes: ele sobe, pede a senha-mestra na janela preta, e **abre o navegador
+sozinho já com o token**.
+
+A janela preta precisa ficar aberta enquanto você usa — é o processo dele
+rodando. Fechar a janela desliga o Gideão.
+
+Se preferir não usar o atalho, o comportamento de abrir o navegador vale do
+mesmo jeito no `npm start`. Para desligar isso: engrenagem → *Tela* → **Abrir o
+navegador ao ligar**.
+
 ## Quando ele parece lento
 
 Três controles, em ordem de quanto resolvem:

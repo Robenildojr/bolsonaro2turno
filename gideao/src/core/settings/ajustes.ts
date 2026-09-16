@@ -149,6 +149,14 @@ export const AJUSTES: Ajuste[] = [
     grupo: 'Tela',
   },
 
+  {
+    chave: 'ui.abrirNavegador',
+    rotulo: 'Abrir o navegador ao ligar',
+    ajuda: 'Ao subir, ele abre a tela sozinho já com o token — sem precisar copiar endereço.',
+    tipo: 'booleano',
+    grupo: 'Tela',
+  },
+
   // ── como ele pensa ─────────────────────────────────────────────────────────
   {
     chave: 'model.effort',

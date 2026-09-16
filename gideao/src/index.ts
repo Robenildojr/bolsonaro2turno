@@ -90,6 +90,11 @@ export async function boot(opts: BootOptions = {}): Promise<BootedSystem> {
 
   console.log(`\n  ${cfg.assistantName} está no ar.\n  Abra: ${url}\n`);
 
+  if (cfg.ui.abrirNavegador) {
+    const { abrirNoNavegador } = await import('./util/abrir.js');
+    if (await abrirNoNavegador(url)) console.log('  (abri no seu navegador)\n');
+  }
+
   const shutdownAll = async () => {
     log.info('encerrando…');
     await http.stop().catch(() => {});
