@@ -968,3 +968,55 @@ body::after {
 .ajustes-estado.erro { color: var(--perigo); }
 .ajustes-estado.ok { color: var(--acento-claro); }
 .ajustes-carregando { color: var(--tinta-fraca); font-size: 0.78rem; padding-top: 18px; }
+
+/* ── indicador de escuta contínua ─────────────────────────────────────────────
+ *
+ * Espelha o indicador do observador de propósito: os dois dizem "alguma coisa
+ * está captando agora", e devem ser reconhecíveis pelo mesmo relance de olho.
+ */
+
+.escuta {
+  position: fixed;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  right: 18px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 9px;
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--tinta-fraca);
+  background: var(--cartao);
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color var(--transicao), border-color var(--transicao);
+}
+
+.escuta:hover { color: var(--tinta); border-color: var(--tinta-fraca); }
+
+.escuta .ponto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ciano);
+  animation: respirar-ponto 2.4s ease-in-out infinite;
+}
+
+/* Acordado: ele ouviu o nome e está capturando o comando. */
+.escuta.acordado {
+  color: var(--acento-claro);
+  border-color: color-mix(in srgb, var(--acento) 50%, transparent);
+}
+.escuta.acordado .ponto { background: var(--acento-claro); animation-duration: 0.9s; }
+
+@keyframes respirar-ponto {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .escuta .ponto { animation: none; opacity: 0.9; }
+}

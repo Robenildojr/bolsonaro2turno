@@ -185,6 +185,21 @@ export const ConfigSchema = z.object({
     tom: num(0.92),
     /** Ler as respostas em voz alta sem precisar pedir. */
     falarAuto: bool(true),
+
+    /*
+     * Escuta contínua: o microfone fica aberto e basta chamar pelo nome.
+     *
+     * Nasce desligada, e não é por timidez. Enquanto está ligada, o navegador
+     * manda **todo** o áudio captado para o servidor dele (Google no Chrome,
+     * Microsoft no Edge) — não só o que vem depois do nome. Para quem tem dever
+     * de sigilo isso é decisão profissional, não preferência de conforto, e
+     * decisão assim não se toma por padrão de fábrica.
+     */
+    escutaContinua: bool(false),
+    /** O que dizer para acordá-lo. Variações de pronúncia são toleradas. */
+    palavraChave: z.string().default('Gideão'),
+    /** Minutos sem ser chamado até o microfone se fechar sozinho. */
+    minutosOciosos: num(30),
   })
     .default({}),
 

@@ -154,6 +154,15 @@
     <!-- Avisos: lembretes, audiências, movimentações. -->
     <div id="avisos" class="avisos" aria-live="polite"></div>
 
+    <!--
+      Indicador da escuta. Fica na tela enquanto o microfone está aberto, e
+      muda de texto quando ele acorda. Vigilância que se esquece vira armadilha:
+      se o microfone está ligado, tem que dar para ver de relance.
+    -->
+    <button id="escuta" class="escuta" hidden title="Clique para fechar o microfone">
+      <span class="ponto"></span> <span id="escuta-texto">ouvindo</span>
+    </button>
+
     <!-- Indicador do observador. Visível sempre que estiver ligado. -->
     <div id="observador" class="observador" hidden>
       <span class="ponto"></span> observando

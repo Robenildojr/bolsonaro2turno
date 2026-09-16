@@ -39,6 +39,8 @@ const el = {
   arquivo: $('arquivo'),
   anexos: $('anexos'),
   soltar: $('soltar'),
+  escuta: $('escuta'),
+  escutaTexto: $('escuta-texto'),
 };
 
 const orbe = new Orbe(el.canvas);
@@ -50,6 +52,7 @@ const estado = {
   bufferResposta: '',
   falarRespostas: localStorage.getItem('gideao_voz') !== '0',
   legendas: true,
+  escutando: false,
   assistente: 'Gideão',
   filaPermissoes: [],
   permissaoAtual: null,
@@ -79,12 +82,37 @@ const voz = new Voz({
     estado.ultimaEntradaPorVoz = true;
     enviar(texto);
   },
-  aoEstado: ({ gravando, erro, transcreve }) => {
-    el.microfone.classList.toggle('gravando', Boolean(gravando));
-    orbe.definirEstado(gravando ? 'listening' : estado.respondendo ? 'responding' : 'idle');
-    if (gravando && transcreve === false) {
-      mostrarAviso('Sem transcrição', 'Este navegador não reconhece fala. Use o teclado.', 'normal');
+  aoEstado: ({ gravando, erro, transcreve, escutando, acordado, ocioso }) => {
+    if (gravando !== undefined) {
+      el.microfone.classList.toggle('gravando', Boolean(gravando));
+      orbe.definirEstado(gravando ? 'listening' : estado.respondendo ? 'responding' : 'idle');
+      if (gravando && transcreve === false) {
+        mostrarAviso('Sem transcrição', 'Este navegador não reconhece fala. Use o teclado.', 'normal');
+      }
     }
+
+    if (escutando !== undefined) {
+      estado.escutando = escutando;
+      el.escuta.hidden = !escutando;
+      if (!escutando) el.escuta.classList.remove('acordado');
+    }
+
+    if (acordado !== undefined) {
+      el.escuta.classList.toggle('acordado', Boolean(acordado));
+      el.escutaTexto.textContent = acordado ? 'pode falar' : 'ouvindo';
+      // Acordado, o orbe reage como se você tivesse apertado o microfone.
+      if (acordado) orbe.definirEstado('listening');
+      else if (!estado.respondendo) orbe.definirEstado('idle');
+    }
+
+    if (ocioso) {
+      mostrarAviso(
+        'Microfone fechado',
+        'Faz tempo que você não me chama, então fechei o microfone. Liga de novo na engrenagem.',
+        'normal',
+      );
+    }
+
     if (erro) mostrarAviso('Microfone', erro, 'normal');
   },
 });
@@ -119,6 +147,24 @@ function aplicarPreferencias(cfg = {}) {
     if (typeof cfg.voz.falarAuto === 'boolean') {
       estado.falarRespostas = cfg.voz.falarAuto;
     }
+    if (typeof cfg.voz.escutaContinua === 'boolean') {
+      if (cfg.voz.escutaContinua && !estado.escutando) {
+        // O navegador só abre o microfone a partir de um gesto do dono. No
+        // arranque isso pode não valer, então a falha aqui é normal e o aviso
+        // diz o que fazer em vez de sumir calado.
+        voz
+          .escutarSempre({
+            palavra: cfg.voz.palavraChave || 'Gideão',
+            minutosOciosos: cfg.voz.minutosOciosos ?? 30,
+          })
+          .then((ok) => {
+            if (!ok) return;
+          })
+          .catch(() => {});
+      } else if (!cfg.voz.escutaContinua && estado.escutando) {
+        voz.pararDeEscutar();
+      }
+    }
   }
   if (cfg.tela) {
     if (typeof cfg.tela.matiz === 'number') orbe.definirMatiz(cfg.tela.matiz);
@@ -143,6 +189,9 @@ function preferenciasDe(ajustes = []) {
       velocidade: valor('voice.velocidade'),
       tom: valor('voice.tom'),
       falarAuto: valor('voice.falarAuto'),
+      escutaContinua: valor('voice.escutaContinua'),
+      palavraChave: valor('voice.palavraChave'),
+      minutosOciosos: valor('voice.minutosOciosos'),
     },
     tela: { matiz: valor('ui.matiz'), legendas: valor('ui.legendas') },
   };
@@ -483,6 +532,13 @@ el.form.addEventListener('submit', (evento) => {
 });
 
 el.microfone.addEventListener('click', () => voz.alternar());
+
+// Clicar no indicador fecha o microfone na hora — o caminho mais curto para
+// calar quando o cliente entra na sala.
+el.escuta.addEventListener('click', () => {
+  voz.pararDeEscutar();
+  mostrarAtividade('microfone fechado', 2200);
+});
 
 el.parar.addEventListener('click', () => {
   enviarSocket({ type: 'interromper' });

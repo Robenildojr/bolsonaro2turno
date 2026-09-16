@@ -103,6 +103,33 @@ export const AJUSTES: Ajuste[] = [
     grupo: 'Voz',
   },
 
+  {
+    chave: 'voice.escutaContinua',
+    rotulo: 'Escutar sempre, sem clicar',
+    ajuda:
+      'O microfone fica aberto e basta chamar pelo nome. ATENÇÃO: enquanto ligado, TODO o áudio captado vai para os servidores do navegador (Google no Chrome, Microsoft no Edge) — inclusive conversa de cliente. Desligue antes de tratar assunto sigiloso.',
+    tipo: 'booleano',
+    grupo: 'Voz',
+    somenteInterface: true,
+  },
+  {
+    chave: 'voice.palavraChave',
+    rotulo: 'Como chamar ele',
+    ajuda: 'A palavra que acorda ele. Variações de pronúncia são toleradas.',
+    tipo: 'texto',
+    grupo: 'Voz',
+  },
+  {
+    chave: 'voice.minutosOciosos',
+    rotulo: 'Fechar o microfone depois de',
+    ajuda: 'Minutos sem ser chamado até a escuta se desligar sozinha.',
+    tipo: 'numero',
+    min: 5,
+    max: 240,
+    passo: 5,
+    grupo: 'Voz',
+  },
+
   // ── tela ───────────────────────────────────────────────────────────────────
   {
     chave: 'ui.legendas',
