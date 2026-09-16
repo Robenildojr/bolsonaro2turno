@@ -77,9 +77,14 @@ describe('registro de ferramentas', () => {
     assert.deepEqual(registry.toApiTools().map((t) => t.name), ['alfa', 'mike', 'zulu']);
   });
 
-  it('marca as ferramentas como estritas', () => {
+  it('NÃO marca as ferramentas como estritas', () => {
+    // Este teste já afirmou o contrário, e é por isso que o bug passou: a API
+    // aceita no máximo 20 ferramentas estritas, e este sistema tem 43. Marcar
+    // todas fazia a requisição voltar 400 e o agente não responder nada — coisa
+    // que só aparece numa chamada real, nunca aqui. A conferência dos
+    // argumentos ficou com o zod, exigido no registro.
     registry.register(toolEco());
-    assert.equal((registry.toApiTools()[0] as { strict?: boolean }).strict, true);
+    assert.ok(!('strict' in registry.toApiTools()[0]!));
   });
 
   it('responde com erro legível para ferramenta inexistente', async () => {

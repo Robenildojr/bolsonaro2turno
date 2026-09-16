@@ -14,7 +14,19 @@ import { initVault } from '../src/core/vault/vault.js';
 import { ToolRegistry } from '../src/core/agent/tools.js';
 import { fsTools, isProtectedPath, resolvePath } from '../src/tools/fs.tools.js';
 import { commandScope, splitArgs, shellTools } from '../src/tools/shell.tools.js';
-import { htmlToText } from '../src/tools/web.tools.js';
+import { htmlToText, webTools } from '../src/tools/web.tools.js';
+import { fsTools as _fs } from '../src/tools/fs.tools.js';
+import { documentoTools } from '../src/tools/documento.tools.js';
+import { browserTools } from '../src/tools/browser.tools.js';
+import { memoryTools } from '../src/tools/memory.tools.js';
+import { vaultTools } from '../src/tools/vault.tools.js';
+import { systemTools } from '../src/tools/system.tools.js';
+import { whatsappTools } from '../src/tools/whatsapp.tools.js';
+import { agendaTools, emailTools, justiceTools } from '../src/tools/agenda.tools.js';
+import { backupTools } from '../src/tools/backup.tools.js';
+import { observerTools } from '../src/tools/observer.tools.js';
+import { ajustesTools } from '../src/tools/ajustes.tools.js';
+import { atualizacaoTools } from '../src/tools/atualizacao.tools.js';
 import { loadConfig, paths } from '../src/config.js';
 
 let tmp: string;
@@ -316,5 +328,89 @@ describe('conversão de HTML', () => {
     const texto = htmlToText('<p>Tr&#234;s &amp; quatro &lt;ok&gt;</p>');
     assert.ok(texto.includes('Três & quatro <ok>'));
     assert.ok(!/[<>]\w/.test(texto.replace('<ok>', '')));
+  });
+});
+
+/**
+ * O contrato entre as ferramentas e a API.
+ *
+ * Estes testes existem porque um erro aqui só aparecia na primeira conversa de
+ * verdade: a bateria não faz chamada à API, então marcar as 43 ferramentas como
+ * `strict` passou verde em 275 testes e derrubou o agente no uso real, com
+ * "Too many strict tools (43). The maximum is 20".
+ */
+describe('contrato das ferramentas com a API', () => {
+  const todas = [
+    ...fsTools,
+    ...documentoTools,
+    ...shellTools,
+    ...browserTools,
+    ...webTools,
+    ...memoryTools,
+    ...vaultTools,
+    ...systemTools,
+    ...whatsappTools,
+    ...agendaTools,
+    ...justiceTools,
+    ...emailTools,
+    ...backupTools,
+    ...observerTools,
+    ...ajustesTools,
+    ...atualizacaoTools,
+  ];
+
+  it('o conjunto inteiro registra sem erro', () => {
+    // Falha se qualquer ferramenta receber argumento sem declarar `validate`.
+    const reg = new ToolRegistry();
+    assert.doesNotThrow(() => reg.registerAll(todas));
+    assert.ok(reg.names().length >= 40, `só ${reg.names().length} ferramentas`);
+  });
+
+  it('nenhuma ferramenta vai para a API marcada como estrita', () => {
+    const reg = new ToolRegistry();
+    reg.registerAll(todas);
+    for (const t of reg.toApiTools()) {
+      assert.ok(
+        !('strict' in t),
+        `${(t as { name: string }).name} vai com strict — a API aceita no máximo 20 e aqui são ${todas.length}`,
+      );
+    }
+  });
+
+  it('recusa no registro uma ferramenta com argumentos e sem validação', () => {
+    const reg = new ToolRegistry();
+    assert.throws(
+      () =>
+        reg.register({
+          name: 'sem_validacao',
+          description: 'exemplo',
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['alvo'],
+            properties: { alvo: { type: 'string' } },
+          },
+          summarize: () => 'x',
+          async run() {
+            return { ok: true, content: '' };
+          },
+        }),
+      /não declara validate/,
+    );
+  });
+
+  it('aceita ferramenta sem argumento nenhum', () => {
+    const reg = new ToolRegistry();
+    assert.doesNotThrow(() =>
+      reg.register({
+        name: 'sem_argumento',
+        description: 'exemplo',
+        schema: { type: 'object', additionalProperties: false, required: [], properties: {} },
+        summarize: () => 'x',
+        async run() {
+          return { ok: true, content: '' };
+        },
+      }),
+    );
   });
 });

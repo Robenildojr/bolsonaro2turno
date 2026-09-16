@@ -83,6 +83,25 @@ export class ToolRegistry {
 
   register<I>(tool: ToolDefinition<I>): void {
     if (this.tools.has(tool.name)) throw new Error(`ferramenta duplicada: ${tool.name}`);
+
+    /*
+     * Toda ferramenta que recebe argumento precisa validar os argumentos.
+     *
+     * Isto era garantido pelo `strict: true` da API, que rejeitava argumento
+     * fora do schema antes de chegar aqui. Só que `strict` tem teto de 20
+     * ferramentas e este sistema tem 43 — passou do teto e a API recusou a
+     * conversa inteira com 400. A validação voltou para casa, e esta checagem
+     * é o que impede que ela seja esquecida numa ferramenta nova: promessa em
+     * comentário se perde, erro no arranque não.
+     */
+    const propriedades = (tool.schema as { properties?: Record<string, unknown> }).properties ?? {};
+    if (Object.keys(propriedades).length > 0 && !tool.validate) {
+      throw new Error(
+        `ferramenta ${tool.name} recebe argumentos mas não declara validate — ` +
+          'sem isso os argumentos do modelo entram sem conferência',
+      );
+    }
+
     this.tools.set(tool.name, tool);
   }
 
@@ -101,6 +120,12 @@ export class ToolRegistry {
   /**
    * Definições no formato da API. A ordem é estável (alfabética) porque uma
    * lista de ferramentas que muda de ordem invalida o cache de prompt.
+   *
+   * Sem `strict: true`. A API aceita no máximo 20 ferramentas estritas e aqui
+   * são 43 — marcar todas fazia a requisição inteira voltar 400, ou seja, o
+   * agente não respondia nada. A conferência dos argumentos acontece em
+   * `execute()`, com o schema zod que `register()` agora exige de toda
+   * ferramenta que receba argumento.
    */
   toApiTools(): Anthropic.Beta.BetaToolUnion[] {
     return [...this.tools.values()]
@@ -109,7 +134,6 @@ export class ToolRegistry {
         name: t.name,
         description: t.description,
         input_schema: t.schema as Anthropic.Beta.BetaTool.InputSchema,
-        strict: true,
       }));
   }
 
