@@ -255,42 +255,76 @@ function repairWindow(messages: Anthropic.Beta.BetaMessageParam[]): Anthropic.Be
     break;
   }
 
-  return responderChamadasPendentes(out);
+  return alinharChamadasEResultados(out);
 }
 
 /**
- * Responde toda chamada de ferramenta que ficou sem resposta **no meio** da
- * conversa.
+ * Alinha chamadas de ferramenta e resultados, nos dois sentidos.
  *
- * Consertar só as pontas não bastava, e o caso que provou isso aconteceu na
- * instalação do dono: o navegador falhou, o modelo recusou a ação seguinte, e o
- * turno morreu deixando um `tool_use` gravado sem o `tool_result` dele. A
- * conversa continuou por cima. Daí em diante **toda** mensagem reenviava aquele
- * histórico e a API devolvia 400 — a conversa ficou morta para sempre, e nem
- * recarregar a página resolvia.
+ * A API exige um casamento exato: cada `tool_use` precisa de um `tool_result`
+ * na mensagem seguinte, e cada `tool_result` precisa do `tool_use` dele na
+ * mensagem anterior. Violar qualquer um dos dois lados devolve 400 — e como o
+ * histórico inteiro é reenviado a cada turno, uma conversa que quebrou uma vez
+ * fica morta para sempre. Não adianta recarregar a página nem reiniciar.
  *
- * A resposta sintética diz a verdade — a ferramenta não completou — em vez de
- * apagar a chamada. Apagar reescreveria o passado: o modelo tentou, e saber que
- * tentou e falhou é informação útil para ele não repetir o mesmo caminho.
+ * Os dois lados quebraram de verdade na instalação do dono, em sequência:
+ * primeiro uma chamada sem resposta (o turno morreu entre chamar a ferramenta
+ * e gravar o resultado), depois um resultado sem chamada (sobra da mesma
+ * bagunça). Consertar só um lado deixou o outro aparecer no dia seguinte, e a
+ * lição está aqui: em invariante de duas pontas, remendar uma ponta só é meio
+ * conserto.
+ *
+ * A ordem das duas passagens importa. Primeiro tira o resultado órfão, senão a
+ * segunda passagem "responderia" uma chamada que não existe; depois completa a
+ * chamada sem resposta, inclusive as que a primeira passagem acabou de deixar
+ * a descoberto.
  */
-function responderChamadasPendentes(
+function alinharChamadasEResultados(
   messages: Anthropic.Beta.BetaMessageParam[],
 ): Anthropic.Beta.BetaMessageParam[] {
-  const out: Anthropic.Beta.BetaMessageParam[] = [];
+  // ── passagem 1: fora os resultados sem chamada ──────────────────────────────
+  const semOrfaos: Anthropic.Beta.BetaMessageParam[] = [];
+  for (const msg of messages) {
+    if (msg.role !== 'user' || !hasBlockType(msg, 'tool_result')) {
+      semOrfaos.push(msg);
+      continue;
+    }
 
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i]!;
+    // O que vale é o que vai de fato na frente dele, não o que estava no banco.
+    const anterior = semOrfaos[semOrfaos.length - 1];
+    const validos = new Set(
+      anterior?.role === 'assistant' ? idsDeBloco(anterior, 'tool_use') : [],
+    );
+
+    const blocos = (msg.content as unknown as Array<Record<string, unknown>>).filter(
+      (b) => b?.type !== 'tool_result' || validos.has(String(b.tool_use_id ?? '')),
+    );
+
+    // Sobrou nada: a mensagem era só de órfãos e não tem por que existir.
+    if (blocos.length === 0) continue;
+    semOrfaos.push({ ...msg, content: blocos as unknown as Anthropic.Beta.BetaContentBlockParam[] });
+  }
+
+  // ── passagem 2: responde as chamadas que ficaram sem resposta ───────────────
+  const out: Anthropic.Beta.BetaMessageParam[] = [];
+  for (let i = 0; i < semOrfaos.length; i++) {
+    const msg = semOrfaos[i]!;
     out.push(msg);
 
     if (msg.role !== 'assistant') continue;
     const chamadas = idsDeBloco(msg, 'tool_use');
     if (!chamadas.length) continue;
 
-    const proxima = messages[i + 1];
+    const proxima = semOrfaos[i + 1];
     const respondidas = new Set(proxima ? idsDeBloco(proxima, 'tool_result') : []);
     const faltando = chamadas.filter((id) => !respondidas.has(id));
     if (!faltando.length) continue;
 
+    /*
+     * Responder em vez de apagar a chamada é deliberado: apagar reescreveria o
+     * passado, e saber que tentou e falhou é informação útil para o modelo não
+     * insistir no mesmo caminho.
+     */
     const remendos = faltando.map((id) => ({
       type: 'tool_result' as const,
       tool_use_id: id,
@@ -298,11 +332,11 @@ function responderChamadasPendentes(
       content: 'A ferramenta não chegou a responder — o turno foi interrompido antes.',
     }));
 
-    // Já existe um turno de resultados logo depois: acrescenta os que faltam
-    // ali dentro, porque a API exige todos os resultados na MESMA mensagem.
+    // Já existe um turno de resultados logo depois: os que faltam entram ali
+    // dentro, porque a API exige todos os resultados na MESMA mensagem.
     if (proxima?.role === 'user' && hasBlockType(proxima, 'tool_result')) {
       const conteudo = Array.isArray(proxima.content) ? proxima.content : [];
-      messages[i + 1] = { ...proxima, content: [...remendos, ...conteudo] } as typeof proxima;
+      semOrfaos[i + 1] = { ...proxima, content: [...remendos, ...conteudo] } as typeof proxima;
       continue;
     }
 

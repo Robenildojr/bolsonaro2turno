@@ -329,6 +329,101 @@ describe('conversas', () => {
     assert.equal(api.length, 4, 'nada deveria ter sido acrescentado');
   });
 
+  it('descarta resultado de ferramenta sem a chamada correspondente', () => {
+    // O espelho do caso anterior, e a segunda metade do mesmo estrago: sobrou
+    // um `tool_result` cujo `tool_use` não existe. A API recusa igual.
+    const cs = conversations();
+    const conv = cs.create('web');
+    const anexar = (role: 'user' | 'assistant', blocks: unknown[]) =>
+      cs.append({ conversationId: conv.id, role, content: 'x', channel: 'web', blocks: blocks as never });
+
+    anexar('user', [{ type: 'text', text: 'oi' }]);
+    anexar('assistant', [{ type: 'tool_use', id: 'toolu_real', name: 'info_sistema', input: {} }]);
+    anexar('user', [
+      { type: 'tool_result', tool_use_id: 'toolu_real', content: 'ok' },
+      { type: 'tool_result', tool_use_id: 'toolu_fantasma', content: 'sobra de um turno morto' },
+    ]);
+    anexar('assistant', [{ type: 'text', text: 'pronto' }]);
+
+    const api = cs.toApiMessages(conv.id, 20);
+    const resultados = api.flatMap((m) =>
+      ((m.content as Array<Record<string, unknown>>) ?? [])
+        .filter((b) => b?.type === 'tool_result')
+        .map((b) => String(b.tool_use_id)),
+    );
+    assert.deepEqual(resultados, ['toolu_real'], 'o fantasma tem que sair');
+  });
+
+  it('a mensagem que só tinha resultado órfão desaparece inteira', () => {
+    const cs = conversations();
+    const conv = cs.create('web');
+    const anexar = (role: 'user' | 'assistant', blocks: unknown[]) =>
+      cs.append({ conversationId: conv.id, role, content: 'x', channel: 'web', blocks: blocks as never });
+
+    anexar('user', [{ type: 'text', text: 'oi' }]);
+    anexar('assistant', [{ type: 'text', text: 'olá' }]);
+    anexar('user', [{ type: 'tool_result', tool_use_id: 'toolu_fantasma', content: 'sobra' }]);
+    anexar('assistant', [{ type: 'text', text: 'seguindo' }]);
+
+    const api = cs.toApiMessages(conv.id, 20);
+    assert.ok(
+      !api.some((m) =>
+        ((m.content as Array<Record<string, unknown>>) ?? []).some((b) => b?.type === 'tool_result'),
+      ),
+      'não pode sobrar resultado nenhum',
+    );
+  });
+
+  /**
+   * A rede por baixo das outras.
+   *
+   * Em vez de listar mais um caso quebrado, este confere a **regra** em várias
+   * bagunças de uma vez: saia o que sair de `toApiMessages`, cada resultado tem
+   * a chamada dele imediatamente antes, e cada chamada tem o resultado dela
+   * imediatamente depois. Foi a falta dessa checagem que deixou eu consertar
+   * uma ponta e entregar a outra quebrada.
+   */
+  it('o histórico que vai para a API é sempre coerente', () => {
+    const bagunças: Array<Array<[('user' | 'assistant'), unknown[]]>> = [
+      [['user', [{ type: 'text', text: 'a' }]], ['assistant', [{ type: 'tool_use', id: 't1', name: 'x', input: {} }]]],
+      [
+        ['user', [{ type: 'text', text: 'a' }]],
+        ['assistant', [{ type: 'tool_use', id: 't1', name: 'x', input: {} }]],
+        ['user', [{ type: 'tool_result', tool_use_id: 't2', content: 'errado' }]],
+        ['assistant', [{ type: 'text', text: 'b' }]],
+      ],
+      [
+        ['user', [{ type: 'tool_result', tool_use_id: 't0', content: 'órfão no começo' }]],
+        ['assistant', [{ type: 'tool_use', id: 't1', name: 'x', input: {} }]],
+        ['user', [{ type: 'text', text: 'segue' }]],
+        ['assistant', [{ type: 'tool_use', id: 't2', name: 'y', input: {} }]],
+        ['user', [{ type: 'tool_result', tool_use_id: 't2', content: 'ok' }]],
+        ['assistant', [{ type: 'text', text: 'fim' }]],
+      ],
+    ];
+
+    for (const [n, roteiro] of bagunças.entries()) {
+      const cs = conversations();
+      const conv = cs.create('web');
+      for (const [role, blocks] of roteiro) {
+        cs.append({ conversationId: conv.id, role, content: 'x', channel: 'web', blocks: blocks as never });
+      }
+      const api = cs.toApiMessages(conv.id, 30);
+      const blocos = (m: unknown) => ((m as { content?: unknown })?.content ?? []) as Array<Record<string, unknown>>;
+
+      for (let i = 0; i < api.length; i++) {
+        const chamadas = blocos(api[i]).filter((b) => b?.type === 'tool_use').map((b) => String(b.id));
+        const respostas = blocos(api[i + 1]).filter((b) => b?.type === 'tool_result').map((b) => String(b.tool_use_id));
+        assert.deepEqual(
+          chamadas.slice().sort(),
+          respostas.slice().sort(),
+          `bagunça ${n}, posição ${i}: chamadas e respostas não batem`,
+        );
+      }
+      if (api.length) assert.equal(api[0]!.role, 'user', `bagunça ${n}: precisa começar por user`);
+    }
+  });
+
   it('atende as duas chamadas quando o modelo pede ferramentas em paralelo', () => {
     const cs = conversations();
     const conv = cs.create('web');
