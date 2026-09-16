@@ -1,0 +1,970 @@
+/*
+ * A tela é preta e vazia de propósito. O orbe é o centro; tudo o mais entra
+ * quando tem função e sai quando não tem. Nada de barra lateral, menu ou
+ * cabeçalho permanente competindo com ele.
+ */
+
+:root {
+  --fundo: #05050a;
+  --tinta: #e9e9f2;
+  --tinta-fraca: #8b8ba3;
+  --linha: #1e1e2b;
+  --cartao: #0d0d16;
+  --acento: #8b7cff;
+  --acento-claro: #a99cff;
+  --ciano: #63d2ff;
+  --perigo: #ff6b6b;
+  --alerta: #ffb84d;
+  --raio: 14px;
+  --transicao: 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+ * O atributo `hidden` vale por `display:none` na folha do navegador — que é
+ * fraca demais e perde para qualquer regra de autor com `display`. Sem esta
+ * linha, o cartão de autorização e o painel da conversa ficariam
+ * permanentemente na tela, cobrindo o orbe.
+ */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--tinta);
+  font: 400 16px/1.55 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, Roboto, sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Vinheta sutil: puxa o olho para o centro. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 46%, transparent 38%, rgba(0, 0, 0, 0.55) 100%);
+  z-index: 1;
+}
+
+#orbe {
+  position: fixed;
+  inset: 0;
+  display: block;
+  z-index: 0;
+}
+
+.palco {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  /*
+   * A linha do meio reserva o espaço que o orbe ocupa de fato — o disco mais o
+   * equalizador ao redor, que chega a ~1,7× o raio. Sem essa reserva a legenda
+   * subiria por cima do orbe justamente quando ele está mais aceso.
+   */
+  grid-template-rows: 1fr min(56vmin, 680px) 1fr;
+  align-items: center;
+  justify-items: center;
+  pointer-events: none;
+  padding: 1.5rem 1.25rem 6.5rem;
+}
+
+/* ── legenda ─────────────────────────────────────────────────────────────── */
+
+.legenda {
+  grid-row: 3;
+  align-self: start;
+  max-width: min(46rem, 90vw);
+  margin-top: clamp(0.5rem, 2.5vh, 1.75rem);
+  text-align: center;
+  font-size: clamp(1.05rem, 2.1vw, 1.35rem);
+  line-height: 1.5;
+  letter-spacing: 0.005em;
+  color: var(--tinta);
+  text-wrap: balance;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity var(--transicao), transform var(--transicao);
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.85);
+  max-height: 30vh;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.legenda.visivel {
+  opacity: 1;
+  transform: none;
+}
+
+.legenda .cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.1em;
+  margin-left: 0.1em;
+  vertical-align: text-bottom;
+  background: var(--acento-claro);
+  animation: piscar 1.1s steps(2, start) infinite;
+  border-radius: 1px;
+}
+
+@keyframes piscar {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── atividade (ferramenta em execução) ──────────────────────────────────── */
+
+.atividade {
+  grid-row: 1;
+  align-self: end;
+  margin-bottom: clamp(0.5rem, 2.5vh, 1.75rem);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--tinta-fraca);
+  opacity: 0;
+  transition: opacity var(--transicao);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.atividade.visivel {
+  opacity: 1;
+}
+
+.atividade::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ciano);
+  animation: respirar 1.4s ease-in-out infinite;
+}
+
+@keyframes respirar {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+/* ── barra inferior ──────────────────────────────────────────────────────── */
+
+.barra {
+  position: fixed;
+  left: 50%;
+  bottom: clamp(1rem, 4vh, 2.5rem);
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: min(46rem, calc(100vw - 2rem));
+  padding: 0.4rem;
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  background: rgba(13, 13, 22, 0.72);
+  backdrop-filter: blur(14px);
+  opacity: 0.32;
+  transition: opacity var(--transicao), border-color var(--transicao);
+}
+
+.barra:hover,
+.barra:focus-within,
+.barra.ativa {
+  opacity: 1;
+  border-color: #2b2b3d;
+}
+
+.campo {
+  flex: 1;
+  display: flex;
+}
+
+#entrada {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--tinta);
+  font: inherit;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+#entrada::placeholder {
+  color: #55556b;
+}
+
+.botao {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tinta-fraca);
+  cursor: pointer;
+  transition: color 160ms, background 160ms, transform 160ms;
+}
+
+.botao:hover {
+  color: var(--tinta);
+  background: #17172440;
+}
+
+.botao:active {
+  transform: scale(0.94);
+}
+
+.botao.gravando {
+  color: var(--ciano);
+  background: rgba(99, 210, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(99, 210, 255, 0.35);
+}
+
+.botao.oculto {
+  display: none;
+}
+
+.botao-texto {
+  border: 0;
+  background: none;
+  color: var(--tinta-fraca);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.botao-texto:hover {
+  color: var(--tinta);
+}
+
+/* ── anexos ──────────────────────────────────────────────────────────────── */
+
+.anexos {
+  position: fixed;
+  left: 50%;
+  bottom: calc(clamp(1rem, 4vh, 2.5rem) + 3.6rem);
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  width: min(46rem, calc(100vw - 2rem));
+}
+
+.anexo {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.5rem 0.3rem 0.35rem;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: rgba(13, 13, 22, 0.92);
+  backdrop-filter: blur(10px);
+  font-size: 0.78rem;
+  color: #c9c9dd;
+  max-width: 16rem;
+}
+
+.anexo img {
+  width: 26px;
+  height: 26px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+.anexo .icone {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: #1c1c2b;
+  color: var(--acento-claro);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.anexo .nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anexo .tirar {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--tinta-fraca);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.anexo .tirar:hover {
+  color: var(--perigo);
+}
+
+.anexo[data-estado='enviando'] {
+  opacity: 0.55;
+}
+
+.anexo[data-estado='erro'] {
+  border-color: rgba(255, 107, 107, 0.4);
+  color: #ffa9a9;
+}
+
+.soltar {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 5, 12, 0.82);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.soltar > div {
+  padding: 2rem 3rem;
+  border: 2px dashed var(--acento);
+  border-radius: var(--raio);
+  color: var(--acento-claro);
+  font-size: 1.05rem;
+}
+
+/* ── transcrição ─────────────────────────────────────────────────────────── */
+
+.transcricao {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  width: min(30rem, 92vw);
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 8, 14, 0.94);
+  backdrop-filter: blur(18px);
+  border-left: 1px solid var(--linha);
+  animation: entrar-direita var(--transicao);
+}
+
+@keyframes entrar-direita {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+.transcricao header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--linha);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+}
+
+.mensagens {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  scrollbar-width: thin;
+  scrollbar-color: #24243a transparent;
+}
+
+.msg {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg .quem {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+}
+
+.msg.user {
+  color: #cfcfe4;
+  padding-left: 0.85rem;
+  border-left: 2px solid #2f2f45;
+}
+
+.msg.assistant .quem {
+  color: var(--acento);
+}
+
+.msg.sistema {
+  font-size: 0.8rem;
+  color: var(--tinta-fraca);
+  font-style: italic;
+}
+
+/* ── autorização ─────────────────────────────────────────────────────────── */
+
+.permissao {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(3, 3, 7, 0.72);
+  backdrop-filter: blur(6px);
+  animation: surgir 180ms ease-out;
+}
+
+@keyframes surgir {
+  from {
+    opacity: 0;
+  }
+}
+
+.cartao {
+  width: min(32rem, 100%);
+  padding: 1.5rem;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: var(--cartao);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7);
+}
+
+.risco {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  background: #1b1b2a;
+  color: var(--tinta-fraca);
+}
+
+.risco[data-risco='alto'] {
+  background: rgba(255, 184, 77, 0.14);
+  color: var(--alerta);
+}
+
+.risco[data-risco='critico'] {
+  background: rgba(255, 107, 107, 0.14);
+  color: var(--perigo);
+}
+
+.cartao h2 {
+  margin: 0.75rem 0 0.4rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.explica {
+  margin: 0 0 1rem;
+  color: #b9b9cd;
+  font-size: 0.9rem;
+}
+
+.detalhes {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  background: #0a0a12;
+  border: 1px solid #161622;
+  font-size: 0.82rem;
+}
+
+.detalhes > div {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.12rem 0;
+}
+
+.detalhes dt {
+  flex: 0 0 5.5rem;
+  color: var(--tinta-fraca);
+}
+
+.detalhes dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  color: #d5d5e8;
+}
+
+.motivo {
+  margin: 0 0 1.15rem;
+  font-size: 0.88rem;
+  color: #cacadd;
+}
+
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.acao {
+  flex: 1 1 auto;
+  min-width: 6.5rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: #13131f;
+  color: var(--tinta);
+  font: inherit;
+  font-size: 0.87rem;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms, transform 120ms;
+}
+
+.acao:hover {
+  background: #1b1b2c;
+  border-color: #33334a;
+}
+
+.acao:active {
+  transform: translateY(1px);
+}
+
+.acao.destaque {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #0b0b14;
+  font-weight: 600;
+}
+
+.acao.destaque:hover {
+  background: var(--acento-claro);
+}
+
+.acao.recusa {
+  color: #ffa9a9;
+}
+
+.acao.recusa.sutil {
+  flex: 0 0 auto;
+  min-width: auto;
+  color: #6f6f88;
+  background: transparent;
+  border-color: transparent;
+}
+
+.rodape-cartao {
+  margin: 1rem 0 0;
+  font-size: 0.78rem;
+  color: var(--tinta-fraca);
+}
+
+/* ── avisos ──────────────────────────────────────────────────────────────── */
+
+.avisos {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(22rem, calc(100vw - 2rem));
+}
+
+.aviso {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--linha);
+  border-left: 3px solid var(--acento);
+  border-radius: 10px;
+  background: rgba(13, 13, 22, 0.94);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: entrar-direita 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  cursor: pointer;
+}
+
+.aviso[data-urgencia='high'] {
+  border-left-color: var(--perigo);
+}
+
+.aviso strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.15rem;
+}
+
+.aviso span {
+  font-size: 0.83rem;
+  color: #b4b4c8;
+}
+
+/* ── observador e conexão ────────────────────────────────────────────────── */
+
+.observador {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid rgba(255, 184, 77, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 184, 77, 0.08);
+  color: var(--alerta);
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+}
+
+.observador .ponto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--alerta);
+  animation: respirar 1.6s ease-in-out infinite;
+}
+
+.conexao {
+  position: fixed;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 8;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.25);
+  color: var(--perigo);
+  font-size: 0.74rem;
+}
+
+/* ── telas pequenas ──────────────────────────────────────────────────────── */
+
+@media (max-width: 560px) {
+  .palco {
+    grid-template-rows: 1fr min(50vmin, 340px) 1fr;
+    padding-bottom: 5.5rem;
+  }
+
+  .legenda {
+    font-size: 1rem;
+    max-height: 26vh;
+  }
+
+  .barra {
+    width: calc(100vw - 1.5rem);
+    opacity: 1;
+  }
+
+  .acoes {
+    flex-direction: column;
+  }
+
+  .acao {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── engrenagem e painel de ajustes ───────────────────────────────────────────
+ *
+ * A engrenagem fica quase apagada (opacidade 0.22) porque a tela inicial é o
+ * orbe e mais nada. Ela sobe para 0.85 no hover e no foco de teclado — quem
+ * está procurando acha, quem está conversando não vê.
+ */
+
+.engrenagem {
+  position: fixed;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  left: 18px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tinta-fraca);
+  opacity: 0.22;
+  cursor: pointer;
+  transition: opacity var(--transicao), color var(--transicao), transform var(--transicao);
+}
+
+.engrenagem:hover,
+.engrenagem:focus-visible {
+  opacity: 0.85;
+  color: var(--acento-claro);
+}
+
+.engrenagem:focus-visible {
+  outline: 1px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.engrenagem[aria-expanded='true'] {
+  opacity: 0.9;
+  color: var(--acento-claro);
+  transform: rotate(45deg);
+}
+
+.ajustes {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, 92vw);
+  height: 100%;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--cartao);
+  border-right: 1px solid var(--linha);
+  box-shadow: 24px 0 60px rgb(0 0 0 / 55%);
+  animation: entrar-esquerda var(--transicao);
+}
+
+@keyframes entrar-esquerda {
+  from { transform: translateX(-16px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ajustes { animation: none; }
+  .engrenagem { transition: none; }
+}
+
+.ajustes-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--linha);
+}
+
+.ajustes-topo h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--tinta);
+}
+
+.ajustes-corpo {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 18px 18px;
+}
+
+.ajustes-grupo {
+  padding-top: 18px;
+}
+
+.ajustes-grupo > h3 {
+  margin: 0 0 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tinta-fraca);
+}
+
+.ajuste {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 0;
+  border-top: 1px solid var(--linha);
+}
+
+.ajuste:first-of-type { border-top: none; }
+
+.ajuste-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ajuste label {
+  font-size: 0.82rem;
+  color: var(--tinta);
+  cursor: pointer;
+}
+
+.ajuste .ajuda {
+  font-size: 0.71rem;
+  line-height: 1.5;
+  color: var(--tinta-fraca);
+}
+
+.ajuste input[type='text'],
+.ajuste select,
+.ajuste textarea {
+  width: 100%;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--tinta);
+  background: var(--fundo);
+  border: 1px solid var(--linha);
+  border-radius: 7px;
+}
+
+.ajuste textarea { min-height: 72px; resize: vertical; line-height: 1.5; }
+
+.ajuste input[type='text']:focus,
+.ajuste select:focus,
+.ajuste textarea:focus {
+  outline: none;
+  border-color: var(--acento);
+}
+
+.ajuste input[type='range'] { width: 100%; accent-color: var(--acento); }
+
+.ajuste .valor {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.74rem;
+  color: var(--tinta-fraca);
+  min-width: 2.6rem;
+  text-align: right;
+}
+
+/* Interruptor. Um `input` de verdade por baixo, para teclado e leitor de tela. */
+.chave { position: relative; flex: none; width: 38px; height: 21px; }
+.chave input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.chave span {
+  position: absolute;
+  inset: 0;
+  background: var(--linha);
+  border-radius: 999px;
+  transition: background var(--transicao);
+  pointer-events: none;
+}
+.chave span::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  background: var(--tinta-fraca);
+  border-radius: 50%;
+  transition: transform var(--transicao), background var(--transicao);
+}
+.chave input:checked + span { background: color-mix(in srgb, var(--acento) 55%, transparent); }
+.chave input:checked + span::after { transform: translateX(17px); background: var(--tinta); }
+.chave input:focus-visible + span { outline: 1px solid var(--acento); outline-offset: 2px; }
+.chave input:disabled + span { opacity: 0.4; cursor: not-allowed; }
+
+.ajuste-acao {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 0.72rem;
+  color: var(--tinta-fraca);
+  background: transparent;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ajuste-acao:hover { color: var(--acento-claro); border-color: var(--acento); }
+
+/* autorizações */
+.autorizacao {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--linha);
+  font-size: 0.75rem;
+}
+
+.autorizacao:first-of-type { border-top: none; }
+.autorizacao .cap { color: var(--tinta); }
+.autorizacao .escopo {
+  display: block;
+  color: var(--tinta-fraca);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+  word-break: break-all;
+}
+.autorizacao button {
+  flex: none;
+  font: inherit;
+  font-size: 0.7rem;
+  color: var(--tinta-fraca);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.autorizacao button:hover { color: var(--perigo); }
+
+.ajustes-rodape {
+  padding: 10px 18px 16px;
+  border-top: 1px solid var(--linha);
+  min-height: 42px;
+}
+
+.ajustes-estado { font-size: 0.72rem; color: var(--tinta-fraca); }
+.ajustes-estado.erro { color: var(--perigo); }
+.ajustes-estado.ok { color: var(--acento-claro); }
+.ajustes-carregando { color: var(--tinta-fraca); font-size: 0.78rem; padding-top: 18px; }
