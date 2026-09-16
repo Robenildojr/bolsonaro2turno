@@ -55,6 +55,15 @@ export const ConfigSchema = z.object({
     /** low | medium | high | xhigh | max */
     effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('high'),
     maxTokens: num(32000),
+    /**
+     * Modo rápido: o mesmo modelo, gerando o texto até 2,5× mais rápido.
+     *
+     * Não é um modelo menor nem uma resposta pior — é a mesma inteligência com
+     * mais banda de saída, e custa o dobro por token. Vale quando a demora
+     * incomoda mais que a conta; não vale para rotina de bastidor, que ninguém
+     * está esperando. Só nos modelos Opus, e só na API da Anthropic.
+     */
+    fastMode: bool(false),
     /** Compaction server-side: conversas sem limite de tamanho. */
     compaction: bool(true),
     /**

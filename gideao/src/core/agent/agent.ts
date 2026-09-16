@@ -33,6 +33,19 @@ import {
 
 const log = createLogger('agente');
 
+const FAST_BETA = 'fast-mode-2026-02-01';
+
+/**
+ * O modo rápido existe só na família Opus.
+ *
+ * Fica aqui, exportado e testado, porque o erro é do tipo que não aparece:
+ * o dono troca o modelo pela engrenagem, esquece que o modo rápido ficou
+ * ligado, e todo turno passa a voltar 400. Mandar `speed` para um modelo que
+ * não suporta não degrada — derruba.
+ */
+export function suportaModoRapido(modelo: string): boolean {
+  return /^claude-opus-/.test(modelo);
+}
 const COMPACT_BETA = 'compact-2026-01-12';
 
 /**
@@ -338,10 +351,24 @@ export class Agent {
       stream: true,
     };
 
+    const betas: string[] = [];
     if (this.cfg.model.compaction) {
-      params.betas = [COMPACT_BETA];
+      betas.push(COMPACT_BETA);
       params.context_management = { edits: [{ type: 'compact_20260112' }] };
     }
+
+    /*
+     * O modo rápido existe só na família Opus. Mandar `speed` num modelo que
+     * não suporta devolve 400 e derruba o turno inteiro — então a checagem é
+     * aqui, e não na tela: o dono pode trocar o modelo pela engrenagem e
+     * esquecer que o modo rápido ficou ligado.
+     */
+    if (this.cfg.model.fastMode && suportaModoRapido(this.cfg.model.main)) {
+      params.speed = 'fast';
+      betas.push(FAST_BETA);
+    }
+
+    if (betas.length) params.betas = betas;
     return params;
   }
 

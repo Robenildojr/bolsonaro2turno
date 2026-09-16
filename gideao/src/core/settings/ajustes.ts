@@ -165,6 +165,26 @@ export const AJUSTES: Ajuste[] = [
     ],
   },
 
+  {
+    chave: 'model.fastMode',
+    rotulo: 'Modo rápido',
+    ajuda:
+      'A mesma inteligência gerando o texto até 2,5× mais rápido, pelo dobro do preço por token. Só funciona nos modelos Opus — ligado num Sonnet, é ignorado.',
+    tipo: 'booleano',
+    grupo: 'Raciocínio',
+  },
+  {
+    chave: 'model.maxTokens',
+    rotulo: 'Tamanho máximo da resposta',
+    ajuda: 'Teto de tokens por resposta. Menor não deixa mais rápido, só corta antes.',
+    tipo: 'numero',
+    min: 2000,
+    max: 64000,
+    passo: 1000,
+    grupo: 'Raciocínio',
+    somenteInterface: true,
+  },
+
   // ── segurança ──────────────────────────────────────────────────────────────
   {
     chave: 'permissions.confirmCritical',

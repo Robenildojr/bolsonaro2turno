@@ -47,6 +47,32 @@ Se aparecer *"nenhuma voz em português instalada"*, o sistema não tem voz pt-B
 No Windows isso se resolve em Configurações → Hora e idioma → Idioma → Português
 (Brasil) → Opções → Voz.
 
+## Quando ele parece lento
+
+Três controles, em ordem de quanto resolvem:
+
+**1. Esforço de raciocínio** (engrenagem → *Raciocínio*). Vem em `alto`, que é
+certo para analisar um processo e exagero para "me lembra da audiência".
+`médio` corta a espera pela metade e você quase não nota diferença na conversa
+do dia a dia. `baixo` é para quando a resposta é óbvia.
+
+**2. Modelo em uso.** O padrão é o Opus, o mais capaz. Trocando para
+`claude-sonnet-5` a resposta vem bem mais rápido e custa menos, ao preço de um
+pouco de profundidade — o que pesa em análise jurídica e não pesa em agenda,
+lembrete ou consulta. Mudar exige reiniciar.
+
+**3. Modo rápido** (engrenagem → *Raciocínio*). O **mesmo** modelo gerando o
+texto até 2,5× mais rápido, pelo dobro do preço por token. Não é resposta pior:
+é a mesma inteligência com mais banda de saída. Só funciona nos modelos Opus —
+ligado num Sonnet, é simplesmente ignorado.
+
+A combinação que costuma resolver: **esforço médio** para o dia a dia, e subir
+para `alto` quando for pedir análise de verdade. Dá para pedir isso falando:
+*"Gideão, sobe o esforço para máximo, quero que você pense direito nessa"*.
+
+O que **não** deixa mais rápido: diminuir o tamanho máximo da resposta. Isso não
+acelera nada, só corta a resposta antes do fim.
+
 ## Pela conversa
 
 > "Gideão, fala mais devagar."

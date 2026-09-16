@@ -15,6 +15,7 @@ import { getVault, initVault } from '../src/core/vault/vault.js';
 import { ToolRegistry, truncateForModel, withTimeout } from '../src/core/agent/tools.js';
 import { ConversationStore } from '../src/core/memory/conversations.js';
 import { buildContextBlock, buildSystemPrompt } from '../src/core/agent/prompt.js';
+import { suportaModoRapido } from '../src/core/agent/agent.js';
 import { loadConfig } from '../src/config.js';
 import { bus } from '../src/core/events/bus.js';
 
@@ -427,5 +428,18 @@ describe('prompt', () => {
       observerActive: true,
     });
     assert.match(bloco, /OBSERVADOR LIGADO/);
+  });
+});
+
+describe('modo rápido', () => {
+  it('vale para a família Opus', () => {
+    assert.ok(suportaModoRapido('claude-opus-5'));
+    assert.ok(suportaModoRapido('claude-opus-4-8'));
+  });
+
+  it('não vale para os outros — mandar `speed` ali devolve 400 e derruba o turno', () => {
+    for (const m of ['claude-sonnet-5', 'claude-haiku-4-5', 'claude-fable-5-1', '']) {
+      assert.ok(!suportaModoRapido(m), `${m} não suporta modo rápido`);
+    }
   });
 });

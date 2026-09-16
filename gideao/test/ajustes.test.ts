@@ -48,9 +48,38 @@ describe('a fronteira do que pode ser ajustado', () => {
   });
 
   it('nenhuma chave de segredo aparece no registro', () => {
-    const proibidas = /token|secret|senha|password|apikey|api_key|clientSecret|appSecret/i;
+    // Lista explícita das chaves que de fato carregam segredo na configuração.
+    // Nomear uma a uma em vez de usar um padrão evita as duas falhas do padrão:
+    // deixar passar um segredo com nome criativo, e barrar um ajuste inocente
+    // — foi o que aconteceu com `model.maxTokens`, que é tamanho de resposta e
+    // não tem nada de secreto, mas casa com "token".
+    const segredos = [
+      'server.accessToken',
+      'whatsapp.accessToken',
+      'whatsapp.appSecret',
+      'whatsapp.verifyToken',
+      'whatsapp.phoneNumberId',
+      'whatsapp.owner',
+      'drive.clientId',
+      'drive.clientSecret',
+      'justice.datajudApiKey',
+      'email.user',
+      'home',
+    ];
+    const registradas = new Set(AJUSTES.map((a) => a.chave));
+    for (const chave of segredos) {
+      assert.ok(!registradas.has(chave), `${chave} não pode ser ajustável`);
+    }
+  });
+
+  it('nenhum ajuste novo entra com cara de segredo sem revisão', () => {
+    // Rede de segurança para nome que eu não previ. `maxTokens` está liberado
+    // de propósito: é o teto de tamanho da resposta.
+    const liberadas = new Set(['model.maxTokens']);
+    const suspeita = /secret|senha|password|apikey|api[_-]?key|accesstoken|verifytoken/i;
     for (const a of AJUSTES) {
-      assert.ok(!proibidas.test(a.chave), `${a.chave} não devia ser ajustável`);
+      if (liberadas.has(a.chave)) continue;
+      assert.ok(!suspeita.test(a.chave), `${a.chave} parece segredo — confira antes de liberar`);
     }
   });
 
